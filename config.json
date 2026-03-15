@@ -5,10 +5,10 @@
     "log_level": "INFO" // 日志级别: DEBUG, INFO, WARNING, ERROR
   },
   "data_provider": {
-    "source": "default", // 数据源选择: "akshare" (免费/默认), "tushare" (需Token), "default" (自定义API)
+    "source": "tushare", // 数据源选择: "akshare" (免费/默认), "tushare" (需Token), "default" (自定义API)
     
     // Tushare 配置 (仅当 source="tushare" 时生效)
-    "tushare_token": "", 
+    "tushare_token": "4ba065ecb8eebdebc93dffaef6bc051eeb3a98b46eb7d94fd697282f",
     
     // 自定义 API 配置 (仅当 source="default" 时生效)
     // 示例: 您的 Quantify API 服务地址
