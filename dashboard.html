@@ -506,17 +506,31 @@
             </div>
             <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
                 <span class="text-slate-400 text-xs"><i class="fa-solid fa-calendar-days"></i></span>
-                <select id="bt-range-select" class="bg-transparent text-white focus:outline-none text-xs font-medium">
+                <select id="bt-range-select" onchange="onBacktestRangeChange(this.value)" class="bg-transparent text-white focus:outline-none text-xs font-medium">
                     <option value="1y" selected>近1年</option>
                     <option value="3m">近3个月</option>
                     <option value="6m">近6个月</option>
                     <option value="2y">近2年</option>
                     <option value="ytd">今年以来</option>
+                    <option value="custom">自定义</option>
                 </select>
+            </div>
+            <div id="bt-custom-range" class="hidden items-center gap-2 bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
+                <input id="bt-start-date" type="date" class="bg-transparent text-white text-xs focus:outline-none" />
+                <span class="text-slate-500 text-xs">至</span>
+                <input id="bt-end-date" type="date" class="bg-transparent text-white text-xs focus:outline-none" />
             </div>
             <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
                 <span class="text-slate-400 text-xs"><i class="fa-solid fa-yen-sign"></i></span>
                 <input id="bt-capital-input" type="number" min="10000" step="10000" value="1000000" class="bg-transparent border-none text-white focus:outline-none w-28 text-xs font-mono" />
+            </div>
+            <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
+                <span class="text-slate-400 text-xs"><i class="fa-solid fa-database"></i></span>
+                <select id="source-select" onchange="onSourceSelectChange(this.value)" class="bg-transparent text-white focus:outline-none text-xs font-medium">
+                    <option value="default">default</option>
+                    <option value="tushare">tushare</option>
+                    <option value="akshare">akshare</option>
+                </select>
             </div>
         </div>
 
@@ -595,6 +609,7 @@
         let strategyReportsBuffer = [];
         let liveRunning = false;
         let liveActionPending = false;
+        let currentSource = 'default';
         const DIAG_STATE = {
             wsConnected: false,
             apiLatencyMs: null,
@@ -991,6 +1006,9 @@
                 const res = await fetch('/api/status');
                 const data = await res.json();
                 liveRunning = Boolean(data.is_running && data.active_cabinet_type === 'live');
+                const sourceSel = document.getElementById('source-select');
+                if (data.provider_source) currentSource = data.provider_source;
+                if (sourceSel && data.provider_source) sourceSel.value = data.provider_source;
                 renderLiveStatus();
             } catch (_) {}
         }
@@ -1021,13 +1039,6 @@
 
         function switchStrategy(val) {
             if (val === 'waiting' || val === 'loading') return;
-            
-            // Show Overlay
-            const overlay = document.getElementById('strategy-overlay');
-            const text = document.getElementById('overlay-text');
-            overlay.classList.add('active');
-            
-            // Simulation of reconfiguration steps
             const steps = [
                 "Disconnecting current signals...",
                 "Loading strategy parameters...",
@@ -1035,23 +1046,74 @@
                 "Reconnecting to Menxia Sheng...",
                 "Strategy ONLINE"
             ];
-            
+            playOverlaySteps(steps, () => {
+                logMessage('SYSTEM', `策略切换完成: ${val}`, 'success');
+            });
+            ws.send(JSON.stringify({ type: 'switch_strategy', id: val }));
+        }
+
+        function playOverlaySteps(steps, onDone) {
+            const overlay = document.getElementById('strategy-overlay');
+            const text = document.getElementById('overlay-text');
+            if (!overlay || !text) return;
+            overlay.classList.add('active');
             let i = 0;
             const interval = setInterval(() => {
-                if(i < steps.length) {
+                if (i < steps.length) {
                     text.innerText = steps[i];
                     i++;
                 } else {
                     clearInterval(interval);
                     setTimeout(() => {
                         overlay.classList.remove('active');
-                        logMessage('SYSTEM', `策略切换完成: ${val}`, 'success');
-                    }, 500);
+                        if (onDone) onDone();
+                    }, 450);
                 }
             }, 300);
-            
-            // Here you would send a message to backend to actually switch context if needed
-            ws.send(JSON.stringify({ type: 'switch_strategy', id: val }));
+        }
+
+        async function applySourceSwitch(source) {
+            const sourceSel = document.getElementById('source-select');
+            if (!sourceSel) return;
+            const steps = [
+                "Preparing data-source hot swap...",
+                `Target provider: ${source}`,
+                "Restarting live runtime context...",
+                "Validating provider heartbeat...",
+                "Source ONLINE"
+            ];
+            playOverlaySteps(steps, () => {
+                logMessage('SYSTEM', `数据源切换生效: ${source}`, 'success');
+            });
+            try {
+                const res = await fetch('/api/control/set_source', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source })
+                });
+                if (res.status === 404) {
+                    logMessage('SYSTEM', '切换失败：请重启服务以加载新路由 /api/control/set_source', 'danger');
+                    await syncStatus();
+                    return;
+                }
+                const data = await res.json();
+                if (data.status !== 'success') {
+                    logMessage('SYSTEM', data.msg || '数据源切换失败', 'danger');
+                } else {
+                    currentSource = source;
+                    await syncStatus();
+                }
+            } catch (e) {
+                logMessage('SYSTEM', `数据源切换异常: ${e}`, 'danger');
+            } finally {
+                if (sourceSel) sourceSel.value = currentSource;
+            }
+        }
+
+        function onSourceSelectChange(value) {
+            const next = String(value || '').trim().toLowerCase();
+            if (!next || next === currentSource) return;
+            applySourceSwitch(next);
         }
 
         // --- Backtest Logic ---
@@ -1075,6 +1137,7 @@
             const capitalRaw = Number(document.getElementById('bt-capital-input')?.value || 1000000);
             const capital = Number.isFinite(capitalRaw) && capitalRaw >= 10000 ? Math.floor(capitalRaw) : 1000000;
             const dates = getBacktestDateRange(range);
+            if (!dates) return;
             
             ws.send(JSON.stringify({
                 type: 'start_backtest',
@@ -1090,6 +1153,19 @@
             const end = new Date();
             const start = new Date(end);
             const currentYearStart = new Date(end.getFullYear(), 0, 1);
+            if (range === 'custom') {
+                const s = document.getElementById('bt-start-date')?.value;
+                const e = document.getElementById('bt-end-date')?.value;
+                if (!s || !e) {
+                    logMessage('SYSTEM', '请先选择自定义开始/结束日期', 'danger');
+                    return null;
+                }
+                if (s > e) {
+                    logMessage('SYSTEM', '自定义区间无效：开始日期不能晚于结束日期', 'danger');
+                    return null;
+                }
+                return { start: s, end: e };
+            }
             if (range === '3m') start.setMonth(start.getMonth() - 3);
             else if (range === '6m') start.setMonth(start.getMonth() - 6);
             else if (range === '2y') start.setFullYear(start.getFullYear() - 2);
@@ -1097,6 +1173,18 @@
             else start.setFullYear(start.getFullYear() - 1);
             const fmt = (d) => d.toISOString().slice(0, 10);
             return { start: fmt(start), end: fmt(end) };
+        }
+
+        function onBacktestRangeChange(value) {
+            const custom = document.getElementById('bt-custom-range');
+            if (!custom) return;
+            if (value === 'custom') {
+                custom.classList.remove('hidden');
+                custom.classList.add('flex');
+            } else {
+                custom.classList.add('hidden');
+                custom.classList.remove('flex');
+            }
         }
         
         function updateBacktestProgress(data) {
@@ -1243,6 +1331,7 @@
         logMessage('SYSTEM', '控制台就绪，等待连接...', 'info');
         renderLiveStatus();
         updateConfidenceScore();
+        onBacktestRangeChange(document.getElementById('bt-range-select')?.value || '1y');
 
     </script>
 </body>

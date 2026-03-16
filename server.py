@@ -52,6 +52,7 @@ app.add_middleware(
 active_connections = []
 cabinet_task = None
 current_cabinet = None
+current_provider_source = None
 latest_backtest_result = None
 latest_strategy_reports = {}
 current_backtest_report = None
@@ -168,6 +169,9 @@ class LiveRequest(BaseModel):
 
 class StrategySwitchRequest(BaseModel):
     strategy_id: str
+
+class SourceSwitchRequest(BaseModel):
+    source: str
 
 # --- Routes ---
 
@@ -311,6 +315,26 @@ async def api_switch_strategy(req: StrategySwitchRequest):
         return {"status": "success", "msg": f"Strategy switched to {req.strategy_id}"}
     return {"status": "error", "msg": "No active cabinet running"}
 
+@app.post("/api/control/set_source")
+async def api_set_source(req: SourceSwitchRequest):
+    global cabinet_task, current_provider_source, current_cabinet
+    source = str(req.source or "").lower().strip()
+    if source not in {"default", "tushare", "akshare"}:
+        return {"status": "error", "msg": "source must be one of: default, tushare, akshare"}
+    config.set("data_provider.source", source)
+    current_provider_source = source
+    restarted = False
+    stock_code = None
+    if current_cabinet and type(current_cabinet).__name__ == "LiveCabinet":
+        stock_code = getattr(current_cabinet, "stock_code", None)
+    if stock_code:
+        if cabinet_task and not cabinet_task.done():
+            cabinet_task.cancel()
+        cabinet_task = asyncio.create_task(run_cabinet_task(stock_code))
+        restarted = True
+    await manager.broadcast({"type": "system", "data": {"msg": f"数据源已切换为 {source}"}})
+    return {"status": "success", "msg": f"source switched to {source}", "source": source, "live_restarted": restarted}
+
 @app.post("/api/control/reload_strategies")
 async def api_reload_strategies():
     """Hot reload strategies without restarting the server"""
@@ -347,7 +371,8 @@ async def api_get_status():
     is_running = cabinet_task is not None and not cabinet_task.done()
     return {
         "is_running": is_running,
-        "active_cabinet_type": type(current_cabinet).__name__ if current_cabinet else None
+        "active_cabinet_type": type(current_cabinet).__name__ if current_cabinet else None,
+        "provider_source": current_provider_source or config.get("data_provider.source", "default")
     }
 
 
@@ -449,7 +474,9 @@ async def run_cabinet_task(stock_code):
     config = ConfigLoader.reload()
     
     # Initialize
-    provider_source = config.get("data_provider.source", "default")
+    global current_provider_source
+    provider_source = current_provider_source or config.get("data_provider.source", "default")
+    current_provider_source = provider_source
     
     cab = LiveCabinet(
         stock_code=stock_code,
