@@ -406,3 +406,92 @@ class Strategy08(BaseImplementedStrategy):
                 }
             
         return None
+
+class Strategy09(BaseImplementedStrategy):
+    def __init__(self):
+        super().__init__("09", "箱体降本策略", trigger_timeframe="D")
+        self.history = {}
+        self.strategy_active = {}
+
+    def on_bar(self, kline):
+        code = kline['code']
+        if code not in self.history:
+            self.history[code] = pd.DataFrame()
+        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(60000)
+        df = self.history[code]
+        box_period = int(self._cfg("box_period", 240))
+        rsi_period = int(self._cfg("rsi_period", 14))
+        if len(df) < max(800, box_period * 3):
+            return None
+        df_d = Indicators.resample(df, 'D')
+        if len(df_d) < box_period + 1:
+            return None
+        close = df_d['close']
+        high = df_d['high']
+        low = df_d['low']
+        rsi_series = Indicators.RSI(close, rsi_period)
+        c = float(close.iloc[-1])
+        top = float(high.iloc[-(box_period + 1):-1].max())
+        bot = float(low.iloc[-(box_period + 1):-1].min())
+        if top <= bot:
+            return None
+        box_h = top - bot
+        break_pct = float(self._cfg("break_pct", 0.05))
+        rsi_oversold = float(self._cfg("rsi_oversold", 30))
+        rsi_overbought = float(self._cfg("rsi_overbought", 70))
+        base_build_rsi = float(self._cfg("base_build_rsi", 35))
+        buy_zone_ratio = float(self._cfg("buy_zone_ratio", 0.15))
+        sell_zone_ratio = float(self._cfg("sell_zone_ratio", 0.15))
+        base_qty = int(self._cfg("base_order_qty", max(100, self._qty())))
+        dynamic_qty = int(self._cfg("dynamic_order_qty", max(100, int(base_qty * 0.35))))
+        max_dynamic_qty = int(self._cfg("max_dynamic_qty", dynamic_qty * 3))
+        stop_loss_pct = float(self._cfg("stop_loss_pct", 0.05))
+        if code not in self.strategy_active:
+            self.strategy_active[code] = True
+        if not self.strategy_active.get(code, True):
+            return None
+        qty = int(self.positions.get(code, 0))
+        curr_rsi = float(rsi_series.iloc[-1])
+        if c < bot * (1 - break_pct):
+            self.strategy_active[code] = False
+            if qty > 0:
+                return self.create_exit_signal(kline, qty, "Box Breakdown Exit")
+            return None
+        if c > top * (1 + break_pct):
+            self.strategy_active[code] = False
+            return None
+        mid = (top + bot) / 2.0
+        if qty < base_qty:
+            if bot <= c <= mid and curr_rsi < base_build_rsi:
+                buy_qty = max(0, base_qty - qty)
+                if buy_qty > 0:
+                    return {
+                        'strategy_id': self.id,
+                        'code': code,
+                        'dt': kline['dt'],
+                        'direction': 'BUY',
+                        'price': c,
+                        'qty': buy_qty,
+                        'stop_loss': c * (1 - stop_loss_pct),
+                        'take_profit': None
+                    }
+            return None
+        if bot <= c <= bot + box_h * buy_zone_ratio and curr_rsi <= rsi_oversold:
+            cap_qty = max(0, base_qty + max_dynamic_qty - qty)
+            buy_qty = min(dynamic_qty, cap_qty)
+            if buy_qty > 0:
+                return {
+                    'strategy_id': self.id,
+                    'code': code,
+                    'dt': kline['dt'],
+                    'direction': 'BUY',
+                    'price': c,
+                    'qty': buy_qty,
+                    'stop_loss': c * (1 - stop_loss_pct),
+                    'take_profit': None
+                }
+        if top - box_h * sell_zone_ratio <= c <= top and curr_rsi >= rsi_overbought:
+            sell_qty = min(dynamic_qty, max(0, qty - base_qty))
+            if sell_qty > 0:
+                return self.create_exit_signal(kline, sell_qty, "Box Dynamic Rebalance")
+        return None

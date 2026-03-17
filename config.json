@@ -2,7 +2,7 @@
   "system": {
     "mode": "backtest",
     "enable_live": false,
-    "initial_capital": 1000000.0,
+    "initial_capital": 1000000,
     "log_level": "INFO"
   },
   "data_provider": {
@@ -23,18 +23,20 @@
       "04",
       "05",
       "06",
-      "07"
+      "07",
+      "08",
+      "09"
     ]
   },
   "risk_control": {
     "max_stop_loss_pct": 0.05,
     "max_pos_per_stock": 0.1,
-    "max_total_pos": 0.5,
-    "max_daily_loss_pct": 0.02
+    "max_total_pos": 0.7,
+    "max_daily_loss_pct": 0.05
   },
   "trading_cost": {
-    "commission_rate": 0.00025,
-    "min_commission": 5.0,
+    "commission_rate": 2e-05,
+    "min_commission": 1,
     "stamp_duty": 0.001,
     "transfer_fee": 1e-05
   },
@@ -81,6 +83,20 @@
       "min_history_bars": 13,
       "trailing_stop_pct": 0.01,
       "stop_loss_pct": 0.01
+    },
+    "09": {
+      "box_period": 240,
+      "break_pct": 0.05,
+      "rsi_period": 14,
+      "rsi_oversold": 30,
+      "rsi_overbought": 70,
+      "base_build_rsi": 35,
+      "buy_zone_ratio": 0.15,
+      "sell_zone_ratio": 0.15,
+      "base_order_qty": 600,
+      "dynamic_order_qty": 350,
+      "max_dynamic_qty": 1050,
+      "stop_loss_pct": 0.05
     }
   }
 }

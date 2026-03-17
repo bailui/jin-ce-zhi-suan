@@ -246,6 +246,7 @@
                     <option value="06">06 海豚交易法</option>
                     <option value="07">07 跳空交易系统</option>
                     <option value="08">08 神奇九转</option>
+                    <option value="09">09 箱体降本策略</option>
                 </select>
             </div>
             <div id="strategy-doc-content" class="space-y-3"></div>
@@ -807,6 +808,23 @@
                 params: ['初始止损：买入价 * 0.99', '追踪止损：最高价 * 0.99'],
                 note: '至少需要13根基础K线（9根序列 + 4根比较滞后）。',
                 example: '示例：九连条件和强化校验同时满足后入场，回落触发追踪止损时离场。'
+            },
+            '09': {
+                name: '09 箱体降本策略',
+                trigger: '日线',
+                entry_rules: [
+                    '箱体基准：最近240根日线（不含当根）计算上轨/下轨。',
+                    '底仓建仓：价格位于箱体下半区且RSI低于阈值时，优先补到基础仓位。',
+                    '机动低吸：价格接近下轨且RSI超卖时，分批加机动仓。'
+                ],
+                exit_rules: [
+                    '机动高抛：价格接近上轨且RSI超买时，优先卖出机动仓。',
+                    '跌破止损：价格跌破箱体下轨一定比例时，清仓并停用该策略。',
+                    '上破停用：价格突破箱体上轨一定比例时，停止继续加减仓。'
+                ],
+                params: ['箱体周期: 240', '突破阈值: 5%', 'RSI: 14', '超卖/超买: 30/70', '底仓/机动仓: 可配置'],
+                note: '策略09按日线触发，适合震荡区间做降本和仓位再平衡。',
+                example: '示例：日线接近下轨且RSI=28分批低吸，价格回到上轨附近且RSI>70后高抛机动仓。'
             }
         };
         const STRATEGY_FALLBACK = [
@@ -817,7 +835,8 @@
             { id: '05', name: '3N法则主升浪' },
             { id: '06', name: '海豚交易法' },
             { id: '07', name: '跳空交易系统' },
-            { id: '08', name: '神奇九转' }
+            { id: '08', name: '神奇九转' },
+            { id: '09', name: '箱体降本策略' }
         ];
         
         ws.onopen = () => {
@@ -1387,7 +1406,8 @@
             { id: '05', name: '05 3N主升浪', fields: [{ path: 'strategy_params.05.min_30m_bars', label: '最小30分钟K线', type: 'number', min: 10, max: 1000, step: 1, slider: true }, { path: 'strategy_params.05.volume_ma_window', label: '量能均线窗口', type: 'number', min: 2, max: 30, step: 1, slider: true }, { path: 'strategy_params.05.volume_multiple', label: '放量倍数', type: 'number', min: 1, max: 5, step: 0.1, slider: true }, { path: 'strategy_params.05.max_hold_bars', label: '最大持有Bar', type: 'number', min: 10, max: 5000, step: 10, slider: true }, { path: 'strategy_params.05.stop_loss_pct', label: '止损比例', type: 'number', min: 0.001, max: 0.2, step: 0.001, slider: true, scale: 100 }, { path: 'strategy_params.05.take_profit_pct', label: '止盈比例', type: 'number', min: 0.001, max: 0.5, step: 0.001, slider: true, scale: 100 }] },
             { id: '06', name: '06 海豚交易法', fields: [{ path: 'strategy_params.06.min_history_bars', label: '最小历史K线', type: 'number', min: 10, max: 2000, step: 10, slider: true }, { path: 'strategy_params.06.ma_period', label: 'MA周期', type: 'number', min: 5, max: 120, step: 1, slider: true }, { path: 'strategy_params.06.trailing_stop_pct', label: '追踪止损', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }, { path: 'strategy_params.06.stop_loss_pct', label: '初始止损', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }] },
             { id: '07', name: '07 跳空交易', fields: [{ path: 'strategy_params.07.min_15m_bars', label: '最小15分钟K线', type: 'number', min: 10, max: 1000, step: 1, slider: true }, { path: 'strategy_params.07.gap_down_multiplier', label: '低开阈值系数', type: 'number', min: 0.95, max: 1, step: 0.0005, slider: true }, { path: 'strategy_params.07.trailing_stop_pct', label: '追踪止损', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }, { path: 'strategy_params.07.stop_loss_pct', label: '初始止损', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }] },
-            { id: '08', name: '08 神奇九转', fields: [{ path: 'strategy_params.08.min_history_bars', label: '最小历史K线', type: 'number', min: 10, max: 1000, step: 1, slider: true }, { path: 'strategy_params.08.trailing_stop_pct', label: '追踪止损', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }, { path: 'strategy_params.08.stop_loss_pct', label: '初始止损', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }] }
+            { id: '08', name: '08 神奇九转', fields: [{ path: 'strategy_params.08.min_history_bars', label: '最小历史K线', type: 'number', min: 10, max: 1000, step: 1, slider: true }, { path: 'strategy_params.08.trailing_stop_pct', label: '追踪止损', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }, { path: 'strategy_params.08.stop_loss_pct', label: '初始止损', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }] },
+            { id: '09', name: '09 箱体降本策略', fields: [{ path: 'strategy_params.09.box_period', label: '箱体周期', type: 'number', min: 30, max: 1000, step: 1, slider: true }, { path: 'strategy_params.09.break_pct', label: '突破阈值', type: 'number', min: 0.001, max: 0.2, step: 0.001, slider: true, scale: 100 }, { path: 'strategy_params.09.rsi_period', label: 'RSI周期', type: 'number', min: 5, max: 60, step: 1, slider: true }, { path: 'strategy_params.09.rsi_oversold', label: 'RSI超卖阈值', type: 'number', min: 5, max: 45, step: 1, slider: true }, { path: 'strategy_params.09.rsi_overbought', label: 'RSI超买阈值', type: 'number', min: 55, max: 95, step: 1, slider: true }, { path: 'strategy_params.09.base_build_rsi', label: '底仓建仓RSI阈值', type: 'number', min: 5, max: 60, step: 1, slider: true }, { path: 'strategy_params.09.buy_zone_ratio', label: '低吸区比例', type: 'number', min: 0.01, max: 0.5, step: 0.01, slider: true, scale: 100 }, { path: 'strategy_params.09.sell_zone_ratio', label: '高抛区比例', type: 'number', min: 0.01, max: 0.5, step: 0.01, slider: true, scale: 100 }, { path: 'strategy_params.09.base_order_qty', label: '底仓手数', type: 'number', min: 100, max: 200000, step: 100, slider: true }, { path: 'strategy_params.09.dynamic_order_qty', label: '机动仓单次手数', type: 'number', min: 100, max: 100000, step: 100, slider: true }, { path: 'strategy_params.09.max_dynamic_qty', label: '机动仓总上限', type: 'number', min: 100, max: 500000, step: 100, slider: true }, { path: 'strategy_params.09.stop_loss_pct', label: '止损比例', type: 'number', min: 0.001, max: 0.3, step: 0.001, slider: true, scale: 100 }] }
         ];
 
         function getByPath(obj, path, fallback = undefined) {
@@ -2000,7 +2020,7 @@
                 return `<ul class="list-disc pl-5 space-y-1 text-slate-300 text-xs">${list.map(x => `<li>${x}</li>`).join('')}</ul>`;
             };
             if (strategyId === 'all') {
-                const ids = ['01','02','03','04','05','06','07','08'];
+                const ids = ['01','02','03','04','05','06','07','08','09'];
                 target.innerHTML = ids.map(id => {
                     const d = STRATEGY_GUIDE[id];
                     return `<div class="bg-slate-800/70 border border-slate-700 rounded p-3">
