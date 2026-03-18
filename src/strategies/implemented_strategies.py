@@ -50,7 +50,20 @@ class BaseImplementedStrategy(BaseStrategy):
         return common if common is not None else default
 
     def _qty(self):
-        return int(self._cfg("order_qty", 1000))
+        mode = str(self._cfg("order_qty_mode", "fixed")).strip().lower()
+        fixed_qty = int(float(self._cfg("order_qty", 1000)))
+        if mode != "cash_pct":
+            return max(0, fixed_qty)
+        cash = float(getattr(self, "current_cash", 0.0) or 0.0)
+        pct = float(self._cfg("order_cash_pct", 0.1))
+        price = float(getattr(self, "last_price", 0.0) or 0.0)
+        pct = max(0.0, min(1.0, pct))
+        if cash <= 0 or price <= 0 or pct <= 0:
+            return 0
+        raw_qty = int((cash * pct) // price)
+        lot_size = 100
+        lot_qty = (raw_qty // lot_size) * lot_size
+        return max(0, lot_qty)
 
     def set_backtest_context(self, **kwargs):
         for key, value in kwargs.items():

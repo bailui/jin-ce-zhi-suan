@@ -1533,7 +1533,23 @@
         ];
 
         const STRATEGY_FORM_GROUPS = [
-            { id: 'common', name: '公共参数', fields: [{ path: 'strategy_params.common.order_qty', label: '默认下单数量', type: 'number', min: 100, max: 100000, step: 100, slider: true }] },
+            {
+                id: 'common',
+                name: '公共参数',
+                fields: [
+                    {
+                        path: 'strategy_params.common.order_qty_mode',
+                        label: '默认下单模式',
+                        type: 'select',
+                        options: [
+                            { value: 'fixed', label: '固定数量' },
+                            { value: 'cash_pct', label: '按持有现金百分比' }
+                        ]
+                    },
+                    { path: 'strategy_params.common.order_qty', label: '默认下单数量', type: 'number', min: 100, max: 100000, step: 100, slider: true, desc: '固定数量模式下生效（单位：股）' },
+                    { path: 'strategy_params.common.order_cash_pct', label: '现金下单比例', type: 'number', min: 0.01, max: 1, step: 0.01, slider: true, unit: '%', scale: 100, desc: '现金百分比模式下生效，按当前持有现金估算可买数量并按100股取整' }
+                ]
+            },
             { id: '00', name: '00 长期持有', fields: [] },
             { id: '01', name: '01 三周期共振', fields: [{ path: 'strategy_params.01.min_history_bars', label: '最小历史K线', type: 'number', min: 50, max: 5000, step: 10, slider: true }, { path: 'strategy_params.01.daily_ma10_tolerance', label: 'MA10偏离容忍', type: 'number', min: 0.001, max: 0.1, step: 0.001, slider: true, scale: 100 }, { path: 'strategy_params.01.volume_ma_window', label: '量能均线窗口', type: 'number', min: 2, max: 30, step: 1, slider: true }, { path: 'strategy_params.01.stop_loss_pct', label: '止损比例', type: 'number', min: 0.001, max: 0.2, step: 0.001, slider: true, scale: 100 }] },
             { id: '02', name: '02 烂板战法', fields: [{ path: 'strategy_params.02.max_hold_bars', label: '最大持有Bar', type: 'number', min: 10, max: 5000, step: 10, slider: true }] },

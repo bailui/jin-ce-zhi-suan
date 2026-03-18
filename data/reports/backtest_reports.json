@@ -1,6 +1,490 @@
 {
   "reports": [
     {
+      "report_id": "1773802237463-f29e",
+      "created_at": "2026-03-18T10:50:37",
+      "stock_code": "301227.SZ",
+      "strategy_id": "00",
+      "status": "success",
+      "error_msg": null,
+      "request": {
+        "stock_code": "301227.SZ",
+        "strategy_id": "00",
+        "strategy_ids": [
+          "00"
+        ],
+        "strategy_mode": null,
+        "start": "2025-06-01",
+        "end": "2025-09-30",
+        "capital": 1000000
+      },
+      "summary": {
+        "stock": "301227.SZ",
+        "period": "2025-06-01 - 2025-09-30",
+        "ranking": [
+          {
+            "strategy_id": "00",
+            "total_pnl": 0.0,
+            "roi": 0.0,
+            "annualized_roi": 0.0,
+            "max_dd": 0.0,
+            "win_rate": 0.0,
+            "profit_factor": Infinity,
+            "total_trades": 0,
+            "rejections": 1,
+            "violations": 0,
+            "circuit_breaks": 0,
+            "calmar": 0.0,
+            "sharpe": 0.0,
+            "rank": 1,
+            "rating": "C"
+          }
+        ],
+        "total_trades": 0
+      },
+      "ranking": [
+        {
+          "strategy_id": "00",
+          "total_pnl": 0.0,
+          "roi": 0.0,
+          "annualized_roi": 0.0,
+          "max_dd": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": Infinity,
+          "total_trades": 0,
+          "rejections": 1,
+          "violations": 0,
+          "circuit_breaks": 0,
+          "calmar": 0.0,
+          "sharpe": 0.0,
+          "rank": 1,
+          "rating": "C"
+        }
+      ],
+      "strategy_reports": {
+        "00": {
+          "strategy_id": "00",
+          "start_date": "2025-06-01",
+          "end_date": "2025-09-30",
+          "init_capital": 1000000.0,
+          "end_capital": 1000000.0,
+          "total_return": 0.0,
+          "annual_return": 0.0,
+          "max_drawdown": 0.0,
+          "trade_count": 0,
+          "win_num": 0,
+          "loss_num": 0,
+          "win_rate": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "profit_ratio": 0.0
+        }
+      },
+      "finished_at": "2026-03-18T10:50:52"
+    },
+    {
+      "report_id": "1773802200303-6143",
+      "created_at": "2026-03-18T10:50:00",
+      "stock_code": "301227.SZ",
+      "strategy_id": "00",
+      "status": "success",
+      "error_msg": null,
+      "request": {
+        "stock_code": "301227.SZ",
+        "strategy_id": "00",
+        "strategy_ids": [
+          "00"
+        ],
+        "strategy_mode": null,
+        "start": "2025-06-01",
+        "end": "2025-09-30",
+        "capital": 1000000
+      },
+      "summary": {
+        "stock": "301227.SZ",
+        "period": "2025-06-01 - 2025-09-30",
+        "ranking": [
+          {
+            "strategy_id": "00",
+            "total_pnl": 0,
+            "roi": 0.0,
+            "annualized_roi": 0.0,
+            "max_dd": 0.0,
+            "win_rate": 0.0,
+            "profit_factor": Infinity,
+            "total_trades": 0,
+            "rejections": 1,
+            "violations": 0,
+            "circuit_breaks": 0,
+            "calmar": 0.0,
+            "sharpe": 0.0,
+            "rank": 1,
+            "rating": "C"
+          }
+        ],
+        "total_trades": 0
+      },
+      "ranking": [
+        {
+          "strategy_id": "00",
+          "total_pnl": 0,
+          "roi": 0.0,
+          "annualized_roi": 0.0,
+          "max_dd": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": Infinity,
+          "total_trades": 0,
+          "rejections": 1,
+          "violations": 0,
+          "circuit_breaks": 0,
+          "calmar": 0.0,
+          "sharpe": 0.0,
+          "rank": 1,
+          "rating": "C"
+        }
+      ],
+      "strategy_reports": {
+        "00": {
+          "strategy_id": "00",
+          "start_date": "2025-06-01",
+          "end_date": "2025-09-30",
+          "init_capital": 1000000.0,
+          "end_capital": 1000000.0,
+          "total_return": 0.0,
+          "annual_return": 0.0,
+          "max_drawdown": 0.0,
+          "trade_count": 0,
+          "win_num": 0,
+          "loss_num": 0,
+          "win_rate": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "profit_ratio": 0.0
+        }
+      },
+      "finished_at": "2026-03-18T10:50:13"
+    },
+    {
+      "report_id": "1773802137584-813c",
+      "created_at": "2026-03-18T10:48:57",
+      "stock_code": "301227.SZ",
+      "strategy_id": "00",
+      "status": "success",
+      "error_msg": null,
+      "request": {
+        "stock_code": "301227.SZ",
+        "strategy_id": "00",
+        "strategy_ids": [
+          "00"
+        ],
+        "strategy_mode": null,
+        "start": "2025-06-01",
+        "end": "2025-09-30",
+        "capital": 1000000
+      },
+      "summary": {
+        "stock": "301227.SZ",
+        "period": "2025-06-01 - 2025-09-30",
+        "ranking": [
+          {
+            "strategy_id": "00",
+            "total_pnl": 0,
+            "roi": 0.0,
+            "annualized_roi": 0.0,
+            "max_dd": 0.0,
+            "win_rate": 0.0,
+            "profit_factor": Infinity,
+            "total_trades": 0,
+            "rejections": 1,
+            "violations": 0,
+            "circuit_breaks": 0,
+            "calmar": 0.0,
+            "sharpe": 0.0,
+            "rank": 1,
+            "rating": "C"
+          }
+        ],
+        "total_trades": 0
+      },
+      "ranking": [
+        {
+          "strategy_id": "00",
+          "total_pnl": 0,
+          "roi": 0.0,
+          "annualized_roi": 0.0,
+          "max_dd": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": Infinity,
+          "total_trades": 0,
+          "rejections": 1,
+          "violations": 0,
+          "circuit_breaks": 0,
+          "calmar": 0.0,
+          "sharpe": 0.0,
+          "rank": 1,
+          "rating": "C"
+        }
+      ],
+      "strategy_reports": {
+        "00": {
+          "strategy_id": "00",
+          "start_date": "2025-06-01",
+          "end_date": "2025-09-30",
+          "init_capital": 1000000.0,
+          "end_capital": 1000000.0,
+          "total_return": 0.0,
+          "annual_return": 0.0,
+          "max_drawdown": 0.0,
+          "trade_count": 0,
+          "win_num": 0,
+          "loss_num": 0,
+          "win_rate": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "profit_ratio": 0.0
+        }
+      },
+      "finished_at": "2026-03-18T10:49:11"
+    },
+    {
+      "report_id": "1773801876301-8f57",
+      "created_at": "2026-03-18T10:44:36",
+      "stock_code": "301227.SZ",
+      "strategy_id": "00",
+      "status": "success",
+      "error_msg": null,
+      "request": {
+        "stock_code": "301227.SZ",
+        "strategy_id": "00",
+        "strategy_ids": [
+          "00",
+          "01",
+          "06",
+          "07"
+        ],
+        "strategy_mode": null,
+        "start": "2025-06-01",
+        "end": "2025-09-30",
+        "capital": 1000000
+      },
+      "summary": {
+        "stock": "301227.SZ",
+        "period": "2025-06-01 - 2025-09-30",
+        "ranking": [
+          {
+            "strategy_id": "00",
+            "total_pnl": 0,
+            "roi": 0.0,
+            "annualized_roi": 0.0,
+            "max_dd": 0.0,
+            "win_rate": 0.0,
+            "profit_factor": Infinity,
+            "total_trades": 0,
+            "rejections": 1,
+            "violations": 0,
+            "circuit_breaks": 0,
+            "calmar": 0.0,
+            "sharpe": 0.0,
+            "rank": 2,
+            "rating": "C"
+          },
+          {
+            "strategy_id": "01",
+            "total_pnl": 0,
+            "roi": 0.0,
+            "annualized_roi": 0.0,
+            "max_dd": 0.0,
+            "win_rate": 0.0,
+            "profit_factor": Infinity,
+            "total_trades": 0,
+            "rejections": 0,
+            "violations": 0,
+            "circuit_breaks": 0,
+            "calmar": 0.0,
+            "sharpe": 0.0,
+            "rank": 2,
+            "rating": "C"
+          },
+          {
+            "strategy_id": "06",
+            "total_pnl": 0,
+            "roi": 0.0,
+            "annualized_roi": 0.0,
+            "max_dd": 0.0,
+            "win_rate": 0.0,
+            "profit_factor": Infinity,
+            "total_trades": 0,
+            "rejections": 272,
+            "violations": 0,
+            "circuit_breaks": 0,
+            "calmar": 0.0,
+            "sharpe": 0.0,
+            "rank": 2,
+            "rating": "C"
+          },
+          {
+            "strategy_id": "07",
+            "total_pnl": 0,
+            "roi": 0.0,
+            "annualized_roi": 0.0,
+            "max_dd": 0.0,
+            "win_rate": 0.0,
+            "profit_factor": Infinity,
+            "total_trades": 0,
+            "rejections": 172,
+            "violations": 0,
+            "circuit_breaks": 0,
+            "calmar": 0.0,
+            "sharpe": 0.0,
+            "rank": 2,
+            "rating": "C"
+          }
+        ],
+        "total_trades": 0
+      },
+      "ranking": [
+        {
+          "strategy_id": "00",
+          "total_pnl": 0,
+          "roi": 0.0,
+          "annualized_roi": 0.0,
+          "max_dd": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": Infinity,
+          "total_trades": 0,
+          "rejections": 1,
+          "violations": 0,
+          "circuit_breaks": 0,
+          "calmar": 0.0,
+          "sharpe": 0.0,
+          "rank": 2,
+          "rating": "C"
+        },
+        {
+          "strategy_id": "01",
+          "total_pnl": 0,
+          "roi": 0.0,
+          "annualized_roi": 0.0,
+          "max_dd": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": Infinity,
+          "total_trades": 0,
+          "rejections": 0,
+          "violations": 0,
+          "circuit_breaks": 0,
+          "calmar": 0.0,
+          "sharpe": 0.0,
+          "rank": 2,
+          "rating": "C"
+        },
+        {
+          "strategy_id": "06",
+          "total_pnl": 0,
+          "roi": 0.0,
+          "annualized_roi": 0.0,
+          "max_dd": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": Infinity,
+          "total_trades": 0,
+          "rejections": 272,
+          "violations": 0,
+          "circuit_breaks": 0,
+          "calmar": 0.0,
+          "sharpe": 0.0,
+          "rank": 2,
+          "rating": "C"
+        },
+        {
+          "strategy_id": "07",
+          "total_pnl": 0,
+          "roi": 0.0,
+          "annualized_roi": 0.0,
+          "max_dd": 0.0,
+          "win_rate": 0.0,
+          "profit_factor": Infinity,
+          "total_trades": 0,
+          "rejections": 172,
+          "violations": 0,
+          "circuit_breaks": 0,
+          "calmar": 0.0,
+          "sharpe": 0.0,
+          "rank": 2,
+          "rating": "C"
+        }
+      ],
+      "strategy_reports": {
+        "00": {
+          "strategy_id": "00",
+          "start_date": "2025-06-01",
+          "end_date": "2025-09-30",
+          "init_capital": 250000.0,
+          "end_capital": 250000.0,
+          "total_return": 0.0,
+          "annual_return": 0.0,
+          "max_drawdown": 0.0,
+          "trade_count": 0,
+          "win_num": 0,
+          "loss_num": 0,
+          "win_rate": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "profit_ratio": 0.0
+        },
+        "01": {
+          "strategy_id": "01",
+          "start_date": "2025-06-01",
+          "end_date": "2025-09-30",
+          "init_capital": 250000.0,
+          "end_capital": 250000.0,
+          "total_return": 0.0,
+          "annual_return": 0.0,
+          "max_drawdown": 0.0,
+          "trade_count": 0,
+          "win_num": 0,
+          "loss_num": 0,
+          "win_rate": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "profit_ratio": 0.0
+        },
+        "06": {
+          "strategy_id": "06",
+          "start_date": "2025-06-01",
+          "end_date": "2025-09-30",
+          "init_capital": 250000.0,
+          "end_capital": 250000.0,
+          "total_return": 0.0,
+          "annual_return": 0.0,
+          "max_drawdown": 0.0,
+          "trade_count": 0,
+          "win_num": 0,
+          "loss_num": 0,
+          "win_rate": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "profit_ratio": 0.0
+        },
+        "07": {
+          "strategy_id": "07",
+          "start_date": "2025-06-01",
+          "end_date": "2025-09-30",
+          "init_capital": 250000.0,
+          "end_capital": 250000.0,
+          "total_return": 0.0,
+          "annual_return": 0.0,
+          "max_drawdown": 0.0,
+          "trade_count": 0,
+          "win_num": 0,
+          "loss_num": 0,
+          "win_rate": 0.0,
+          "avg_win": 0.0,
+          "avg_loss": 0.0,
+          "profit_ratio": 0.0
+        }
+      },
+      "finished_at": "2026-03-18T10:45:32"
+    },
+    {
       "report_id": "1773800913567-7579",
       "created_at": "2026-03-18T10:28:33",
       "stock_code": "301227.SZ",

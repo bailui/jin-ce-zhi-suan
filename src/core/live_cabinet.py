@@ -279,7 +279,14 @@ class LiveCabinet:
         tf_text, name_text = self._format_tick_trigger_log(runnable_strategy_ids)
         print(f"   ⏱ 本tick触发周期与策略: {tf_text if tf_text else '无'}")
         print(f"   📋 本tick策略列表: {name_text if name_text else '无'}")
-        signals = self.secretariat.generate_signals(bar, runnable_strategy_ids=runnable_strategy_ids)
+        signals = self.secretariat.generate_signals(
+            bar,
+            runnable_strategy_ids=runnable_strategy_ids,
+            strategy_context={
+                "current_cash": float(self.revenue.cash),
+                "last_price": float(bar.get("close", 0.0))
+            }
+        )
         active_signals = signals
         buy_signals = len([s for s in active_signals if s.get('direction') == 'BUY'])
         sell_signals = len([s for s in active_signals if s.get('direction') == 'SELL'])

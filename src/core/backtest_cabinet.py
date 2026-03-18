@@ -205,7 +205,14 @@ class BacktestCabinet:
                         runnable_strategy_ids.append(sid)
 
             # Generate Signals
-            signals = self.secretariat.generate_signals(kline, runnable_strategy_ids=runnable_strategy_ids)
+            signals = self.secretariat.generate_signals(
+                kline,
+                runnable_strategy_ids=runnable_strategy_ids,
+                strategy_context={
+                    "current_cash": float(self.revenue.cash),
+                    "last_price": float(kline.get("close", 0.0))
+                }
+            )
             if signals:
                 await self._emit('backtest_flow', {
                     'module': '中书省',
