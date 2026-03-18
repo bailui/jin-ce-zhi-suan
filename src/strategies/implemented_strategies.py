@@ -57,6 +57,8 @@ class BaseImplementedStrategy(BaseStrategy):
         cash = float(getattr(self, "current_cash", 0.0) or 0.0)
         pct = float(self._cfg("order_cash_pct", 0.1))
         price = float(getattr(self, "last_price", 0.0) or 0.0)
+        if pct > 1:
+            pct = pct / 100.0
         pct = max(0.0, min(1.0, pct))
         if cash <= 0 or price <= 0 or pct <= 0:
             return 0

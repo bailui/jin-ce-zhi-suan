@@ -28,6 +28,7 @@ class MenxiaSheng:
         direction = signal['direction']
         entry_price = signal['price']
         stop_loss_price = signal.get('stop_loss')
+        portfolio_value = float(current_portfolio_value) if float(current_portfolio_value) > 0 else 1.0
         
         # Rule 1: Single trade stop loss <= 1%
         if stop_loss_price:
@@ -41,25 +42,25 @@ class MenxiaSheng:
         # Assuming signal['amount'] is the value or quantity * price
         # This requires context of current portfolio value.
         position_value = signal['qty'] * entry_price
-        if position_value / current_portfolio_value > max_pos_per_stock:
-             self.xing_bu.record_rejection(strategy_id, 'R2', f"Position size {position_value/current_portfolio_value:.2%} > {max_pos_per_stock:.2%}", signal['dt'])
-             return False, f"单票仓位 {position_value/current_portfolio_value:.2%} 超过限制 ({max_pos_per_stock:.2%})"
+        if direction == 'BUY' and position_value / portfolio_value > max_pos_per_stock:
+             self.xing_bu.record_rejection(strategy_id, 'R2', f"Position size {position_value/portfolio_value:.2%} > {max_pos_per_stock:.2%}", signal['dt'])
+             return False, f"单票仓位 {position_value/portfolio_value:.2%} 超过限制 ({max_pos_per_stock:.2%})"
 
         # Rule 3: Total position <= 50%
         current_total_pos_value = sum([p['market_value'] for p in current_positions.values()])
-        if (current_total_pos_value + position_value) / current_portfolio_value > max_total_pos:
-             self.xing_bu.record_rejection(strategy_id, 'R3', f"Total position {(current_total_pos_value + position_value)/current_portfolio_value:.2%} > {max_total_pos:.2%}", signal['dt'])
-             return False, f"总仓位 {(current_total_pos_value + position_value)/current_portfolio_value:.2%} 超过上限 ({max_total_pos:.2%})"
+        if direction == 'BUY' and (current_total_pos_value + position_value) / portfolio_value > max_total_pos:
+             self.xing_bu.record_rejection(strategy_id, 'R3', f"Total position {(current_total_pos_value + position_value)/portfolio_value:.2%} > {max_total_pos:.2%}", signal['dt'])
+             return False, f"总仓位 {(current_total_pos_value + position_value)/portfolio_value:.2%} 超过上限 ({max_total_pos:.2%})"
 
         # Rule 4: Daily max loss 2% (Circuit Breaker)
-        if daily_pnl / current_portfolio_value < -max_daily_loss_pct:
-             self.xing_bu.record_circuit_break(strategy_id, f"Daily loss {daily_pnl/current_portfolio_value:.2%} < -{max_daily_loss_pct:.2%}", signal['dt'])
-             return False, f"单日亏损 {daily_pnl/current_portfolio_value:.2%} 触发熔断 ({max_daily_loss_pct:.2%})"
+        if direction == 'BUY' and daily_pnl / portfolio_value < -max_daily_loss_pct:
+             self.xing_bu.record_circuit_break(strategy_id, f"Daily loss {daily_pnl/portfolio_value:.2%} < -{max_daily_loss_pct:.2%}", signal['dt'])
+             return False, f"单日亏损 {daily_pnl/portfolio_value:.2%} 触发熔断 ({max_daily_loss_pct:.2%})"
 
         # Rule 5: Consecutive 3 losses -> Stop opening today
         # This state needs to be tracked externally or passed in.
         # Assuming we track it in strategy state or pass it here.
-        if self.consecutive_losses.get(strategy_id, 0) >= CONSECUTIVE_LOSS_LIMIT:
+        if direction == 'BUY' and self.consecutive_losses.get(strategy_id, 0) >= CONSECUTIVE_LOSS_LIMIT:
              self.xing_bu.record_rejection(strategy_id, 'R5', f"Consecutive losses {self.consecutive_losses.get(strategy_id)} >= {CONSECUTIVE_LOSS_LIMIT}", signal['dt'])
              return False, f"连续亏损 {self.consecutive_losses.get(strategy_id)} 次，暂停开仓"
         
