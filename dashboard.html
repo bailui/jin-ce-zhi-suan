@@ -657,9 +657,8 @@
             <button onclick="openConfigCenter()" class="bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-purple-500">
                 <i class="fa-solid fa-sliders"></i> 配置中心
             </button>
-            
-            <button onclick="toggleDebugPanel()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-slate-600">
-                <i class="fa-solid fa-terminal"></i> 调试
+            <button onclick="openStrategyManager()" class="bg-indigo-700 hover:bg-indigo-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-indigo-500">
+                <i class="fa-solid fa-chess-knight"></i> 策略管理器
             </button>
         </div>
     </footer>
@@ -680,6 +679,74 @@
                     <button onclick="loadConfigCenter()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded text-xs border border-slate-600">重新加载</button>
                     <button onclick="saveConfigCenter()" class="bg-purple-700 hover:bg-purple-600 text-white px-3 py-2 rounded text-xs border border-purple-500">保存并生效</button>
                 </div>
+            </div>
+        </div>
+    </div>
+    <div id="strategy-manager-modal" class="hidden fixed inset-0 bg-black/70 z-[145] flex items-center justify-center p-6">
+        <div class="w-[980px] max-w-[96vw] h-[78vh] bg-slate-900 border border-slate-700 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+                <div class="text-white font-bold"><i class="fa-solid fa-chess-knight mr-2 text-indigo-400"></i>策略管理器</div>
+                <button onclick="closeStrategyManager()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="px-4 py-2 text-xs text-slate-400 border-b border-slate-700">管理策略列表，支持新增、删除、启用与停用</div>
+            <div class="px-4 py-2 flex items-center justify-between border-b border-slate-700">
+                <div id="strategy-manager-status" class="text-xs text-slate-400">待加载</div>
+                <div class="flex items-center gap-2">
+                    <button onclick="loadStrategyManager()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs border border-slate-600">刷新列表</button>
+                    <button onclick="openStrategyCreateModal()" class="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded text-xs border border-indigo-500">新增策略</button>
+                </div>
+            </div>
+            <div class="flex-1 p-4 overflow-y-auto">
+                <div class="overflow-x-auto border border-slate-700 rounded">
+                    <table class="w-full text-xs">
+                        <thead class="bg-slate-800 text-slate-300">
+                            <tr>
+                                <th class="px-3 py-2 text-left">策略ID</th>
+                                <th class="px-3 py-2 text-left">策略名称</th>
+                                <th class="px-3 py-2 text-left">类型</th>
+                                <th class="px-3 py-2 text-left">状态</th>
+                                <th class="px-3 py-2 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="strategy-manager-list" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="strategy-create-modal" class="hidden fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-6">
+        <div class="w-[980px] max-w-[96vw] h-[82vh] bg-slate-900 border border-slate-700 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+                <div class="text-white font-bold"><i class="fa-solid fa-wand-magic-sparkles mr-2 text-cyan-300"></i>新增策略</div>
+                <button onclick="closeStrategyCreateModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="px-4 py-3 border-b border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <div class="text-xs text-slate-400 mb-1">策略名称</div>
+                    <input id="strategy-create-name" type="text" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-slate-100" placeholder="例如：AI动量突破策略">
+                </div>
+                <div class="flex items-end gap-2">
+                    <button onclick="analyzeStrategyTemplate()" class="bg-cyan-700 hover:bg-cyan-600 text-white px-3 py-1.5 rounded text-xs border border-cyan-500"><i class="fa-solid fa-robot mr-1"></i>AI分析</button>
+                    <div id="strategy-create-status" class="text-xs text-slate-400">待输入策略模版</div>
+                </div>
+            </div>
+            <div class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
+                <div class="border-r border-slate-700 p-3 flex flex-col gap-2">
+                    <div class="text-xs text-slate-300">策略模版</div>
+                    <textarea id="strategy-template-input" class="h-40 w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs font-mono text-slate-200" placeholder="请粘贴或输入你的策略思路、入场条件、离场条件、风控规则"></textarea>
+                    <div class="text-xs text-slate-300">代码模版（供AI参考）</div>
+                    <textarea id="strategy-code-template-input" class="flex-1 w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs font-mono text-cyan-200" placeholder="可按项目规范调整代码骨架，帮助AI按模板产出"></textarea>
+                </div>
+                <div class="p-3 flex flex-col gap-2">
+                    <div class="text-xs text-slate-300">AI分析结论</div>
+                    <div id="strategy-analysis-output" class="h-24 overflow-auto bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-300 whitespace-pre-wrap"></div>
+                    <div class="text-xs text-slate-300">可执行策略代码</div>
+                    <textarea id="strategy-code-output" class="flex-1 w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs font-mono text-emerald-200"></textarea>
+                </div>
+            </div>
+            <div class="px-4 py-3 border-t border-slate-700 flex items-center justify-end gap-2">
+                <button onclick="cancelGeneratedStrategy()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs border border-slate-600">取消本次生成</button>
+                <button onclick="confirmAddGeneratedStrategy()" class="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded text-xs border border-indigo-500">增加本次生成策略</button>
             </div>
         </div>
     </div>
@@ -735,6 +802,41 @@
         let currentSource = 'default';
         let strategyCatalog = [];
         let selectedStrategyIds = [];
+        let backtestResultRecovered = false;
+        let strategyManagerRows = [];
+        let pendingGeneratedStrategy = null;
+        const STRATEGY_CODE_TEMPLATE_DEFAULT = `from src.strategies.implemented_strategies import BaseImplementedStrategy
+import pandas as pd
+from src.utils.indicators import Indicators
+
+class GeneratedStrategyTemplate(BaseImplementedStrategy):
+    def __init__(self):
+        super().__init__("{{STRATEGY_ID}}", "{{STRATEGY_NAME}}", trigger_timeframe="1min")
+        self.history = {}
+
+    def on_bar(self, kline):
+        code = kline['code']
+        if code not in self.history:
+            self.history[code] = pd.DataFrame()
+        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(2000)
+        df = self.history[code]
+        if len(df) < 60:
+            return None
+        qty = int(self.positions.get(code, 0))
+        close = float(kline['close'])
+        buy_qty = int(self._qty())
+        if qty <= 0:
+            return {
+                'strategy_id': self.id,
+                'code': code,
+                'dt': kline['dt'],
+                'direction': 'BUY',
+                'price': close,
+                'qty': buy_qty,
+                'stop_loss': close * 0.97,
+                'take_profit': None
+            }
+        return None`;
         const DIAG_STATE = {
             wsConnected: false,
             apiLatencyMs: null,
@@ -929,7 +1031,8 @@
             DIAG_STATE.wsConnected = false;
             updateDebugPanel();
             if (backtestBtnState === BACKTEST_BTN_STATE.running) {
-                setBacktestButtonState(BACKTEST_BTN_STATE.error);
+                logMessage('回测', '已切换为状态轮询，等待回测完成...', 'warning');
+                monitorBacktestTaskStatus();
             }
         };
         syncStatus();
@@ -1535,7 +1638,10 @@
                     { path: 'data_provider.enable_fallback', label: '启用数据回退', type: 'boolean' },
                     { path: 'data_provider.tushare_token', label: 'Tushare Token', type: 'text' },
                     { path: 'data_provider.default_api_key', label: 'Default API Key', type: 'text' },
-                    { path: 'data_provider.default_api_url', label: 'Default API URL', type: 'text' }
+                    { path: 'data_provider.default_api_url', label: 'Default API URL', type: 'text' },
+                    { path: 'data_provider.llm_api_url', label: 'AI服务URL(OpenAI兼容)', type: 'text' },
+                    { path: 'data_provider.llm_api_key', label: 'AI服务API Key', type: 'text' },
+                    { path: 'data_provider.llm_model', label: 'AI模型名', type: 'text' }
                 ]
             },
             {
@@ -1960,6 +2066,206 @@
             }
         }
 
+        function openStrategyManager() {
+            const modal = document.getElementById('strategy-manager-modal');
+            if (modal) modal.classList.remove('hidden');
+            loadStrategyManager();
+        }
+
+        function closeStrategyManager() {
+            const modal = document.getElementById('strategy-manager-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function renderStrategyManagerList(rows) {
+            const body = document.getElementById('strategy-manager-list');
+            if (!body) return;
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-center text-slate-500">暂无策略</td></tr>';
+                return;
+            }
+            body.innerHTML = rows.map(r => {
+                const sid = String(r.id || '');
+                const enabled = !!r.enabled;
+                const statusCls = enabled ? 'text-emerald-300' : 'text-slate-400';
+                const statusTxt = enabled ? '启用中' : '已停用';
+                const kindTxt = r.builtin ? '内置' : '自定义';
+                const toggleTxt = enabled ? '停用' : '启用';
+                const toggleCls = enabled ? 'bg-amber-700 hover:bg-amber-600 border-amber-500' : 'bg-emerald-700 hover:bg-emerald-600 border-emerald-500';
+                const delBtn = r.deletable ? `<button onclick="deleteStrategyManaged('${sid}')" class="text-white px-2 py-1 rounded text-[11px] border bg-rose-700 hover:bg-rose-600 border-rose-500">删除</button>` : '';
+                return `
+                    <tr class="hover:bg-slate-800/40">
+                        <td class="px-3 py-2 text-slate-200 font-mono">${sid}</td>
+                        <td class="px-3 py-2 text-slate-200">${String(r.name || sid)}</td>
+                        <td class="px-3 py-2 text-slate-400">${kindTxt}</td>
+                        <td class="px-3 py-2 ${statusCls}">${statusTxt}</td>
+                        <td class="px-3 py-2 text-right">
+                            <div class="inline-flex gap-1">
+                                <button onclick="toggleStrategyManaged('${sid}', ${enabled ? 'false' : 'true'})" class="text-white px-2 py-1 rounded text-[11px] border ${toggleCls}">${toggleTxt}</button>
+                                ${delBtn}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadStrategyManager() {
+            const status = document.getElementById('strategy-manager-status');
+            try {
+                if (status) status.innerText = '加载中...';
+                const res = await fetch('/api/strategy_manager/list');
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.msg || '读取失败');
+                strategyManagerRows = Array.isArray(data.strategies) ? data.strategies : [];
+                renderStrategyManagerList(strategyManagerRows);
+                if (status) status.innerText = `共 ${strategyManagerRows.length} 个策略`;
+            } catch (e) {
+                if (status) status.innerText = `加载失败: ${e}`;
+            }
+        }
+
+        async function toggleStrategyManaged(strategyId, enabled) {
+            try {
+                const res = await fetch('/api/strategy_manager/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_id: String(strategyId), enabled: !!enabled })
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.msg || '操作失败');
+                logMessage('SYSTEM', `策略 ${strategyId} 已${enabled ? '启用' : '停用'}`, 'success');
+                await loadStrategyManager();
+                await fetchGlobalStrategies();
+            } catch (e) {
+                logMessage('SYSTEM', `策略状态更新失败: ${e}`, 'danger');
+            }
+        }
+
+        async function deleteStrategyManaged(strategyId) {
+            try {
+                const res = await fetch('/api/strategy_manager/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_id: String(strategyId) })
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.msg || '删除失败');
+                logMessage('SYSTEM', `策略 ${strategyId} 已删除`, 'warning');
+                await loadStrategyManager();
+                await fetchGlobalStrategies();
+            } catch (e) {
+                logMessage('SYSTEM', `删除策略失败: ${e}`, 'danger');
+            }
+        }
+
+        function openStrategyCreateModal() {
+            pendingGeneratedStrategy = null;
+            const modal = document.getElementById('strategy-create-modal');
+            if (modal) modal.classList.remove('hidden');
+            const status = document.getElementById('strategy-create-status');
+            if (status) status.innerText = '输入策略模版后点击AI分析';
+            const analysis = document.getElementById('strategy-analysis-output');
+            if (analysis) analysis.innerText = '';
+            const code = document.getElementById('strategy-code-output');
+            if (code) code.value = '';
+            const codeTpl = document.getElementById('strategy-code-template-input');
+            if (codeTpl && !String(codeTpl.value || '').trim()) codeTpl.value = STRATEGY_CODE_TEMPLATE_DEFAULT;
+            const nameInput = document.getElementById('strategy-create-name');
+            if (nameInput && !nameInput.value) nameInput.value = `AI策略${Date.now().toString().slice(-4)}`;
+        }
+
+        function closeStrategyCreateModal() {
+            const modal = document.getElementById('strategy-create-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        async function analyzeStrategyTemplate() {
+            const tplInput = document.getElementById('strategy-template-input');
+            const codeTplInput = document.getElementById('strategy-code-template-input');
+            const nameInput = document.getElementById('strategy-create-name');
+            const status = document.getElementById('strategy-create-status');
+            const templateText = String(tplInput?.value || '').trim();
+            const codeTemplateText = String(codeTplInput?.value || '').trim();
+            const strategyName = String(nameInput?.value || '').trim();
+            if (!templateText) {
+                if (status) status.innerText = '请先输入策略模版';
+                return;
+            }
+            try {
+                if (status) status.innerText = 'AI分析中...';
+                const res = await fetch('/api/strategy_manager/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        template_text: templateText,
+                        strategy_name: strategyName || null,
+                        code_template: codeTemplateText || STRATEGY_CODE_TEMPLATE_DEFAULT
+                    })
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.msg || 'AI分析失败');
+                pendingGeneratedStrategy = {
+                    strategy_id: String(data.strategy_id || ''),
+                    strategy_name: String(data.strategy_name || strategyName || ''),
+                    class_name: String(data.class_name || ''),
+                    analysis_text: String(data.analysis_text || ''),
+                    template_text: templateText
+                };
+                const analysis = document.getElementById('strategy-analysis-output');
+                if (analysis) analysis.innerText = pendingGeneratedStrategy.analysis_text || '已完成分析';
+                const code = document.getElementById('strategy-code-output');
+                if (code) code.value = String(data.code || '');
+                if (status) status.innerText = `已生成策略 ${pendingGeneratedStrategy.strategy_id}`;
+            } catch (e) {
+                if (status) status.innerText = `AI分析失败: ${e}`;
+            }
+        }
+
+        function cancelGeneratedStrategy() {
+            pendingGeneratedStrategy = null;
+            closeStrategyCreateModal();
+        }
+
+        async function confirmAddGeneratedStrategy() {
+            const status = document.getElementById('strategy-create-status');
+            const codeText = String(document.getElementById('strategy-code-output')?.value || '').trim();
+            const nameInput = document.getElementById('strategy-create-name');
+            const nameText = String(nameInput?.value || '').trim();
+            if (!pendingGeneratedStrategy || !pendingGeneratedStrategy.strategy_id) {
+                if (status) status.innerText = '请先点击AI分析生成策略代码';
+                return;
+            }
+            if (!codeText) {
+                if (status) status.innerText = '生成代码为空';
+                return;
+            }
+            try {
+                if (status) status.innerText = '保存中...';
+                const res = await fetch('/api/strategy_manager/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        strategy_id: pendingGeneratedStrategy.strategy_id,
+                        strategy_name: nameText || pendingGeneratedStrategy.strategy_name || pendingGeneratedStrategy.strategy_id,
+                        class_name: pendingGeneratedStrategy.class_name || null,
+                        code: codeText,
+                        template_text: pendingGeneratedStrategy.template_text || '',
+                        analysis_text: pendingGeneratedStrategy.analysis_text || ''
+                    })
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.msg || '保存失败');
+                if (status) status.innerText = '保存成功';
+                logMessage('SYSTEM', `策略 ${pendingGeneratedStrategy.strategy_id} 已新增`, 'success');
+                closeStrategyCreateModal();
+                await loadStrategyManager();
+                await fetchGlobalStrategies();
+            } catch (e) {
+                if (status) status.innerText = `保存失败: ${e}`;
+            }
+        }
+
         async function syncStatus() {
             try {
                 const res = await fetch('/api/status');
@@ -2166,6 +2472,10 @@
                     return;
                 }
                 if (reportStatus === 'success') {
+                    if (!backtestResultRecovered) {
+                        await recoverBacktestResultFromApi();
+                        backtestResultRecovered = true;
+                    }
                     setBacktestButtonState(BACKTEST_BTN_STATE.idle);
                     return;
                 }
@@ -2179,6 +2489,20 @@
                 }
             }
             backtestStatusMonitorTimer = setTimeout(monitorBacktestTaskStatus, 2000);
+        }
+
+        async function recoverBacktestResultFromApi() {
+            try {
+                const res = await fetch('/api/report/latest');
+                const data = await res.json();
+                if (data && data.summary) {
+                    if (Array.isArray(data.strategy_reports)) {
+                        strategyReportsBuffer = data.strategy_reports;
+                        renderStrategyReports();
+                    }
+                    showBacktestResults(data.summary);
+                }
+            } catch (_) {}
         }
 
         async function stopBacktest() {
@@ -2204,6 +2528,7 @@
             const overlay = document.getElementById('backtest-overlay');
             if (overlay) overlay.classList.remove('active');
             strategyReportsBuffer = [];
+            backtestResultRecovered = false;
             document.getElementById('bt-strategy-reports').innerHTML = '';
             
             const code = normalizeCode(document.getElementById('stock-search-input').value || '600036.SH');

@@ -6,6 +6,9 @@ import importlib
 import sys
 import math
 import numbers
+import re
+import urllib.request
+import urllib.error
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse
@@ -16,6 +19,14 @@ from src.core.live_cabinet import LiveCabinet
 from src.core.backtest_cabinet import BacktestCabinet
 from src.utils.config_loader import ConfigLoader
 import src.strategies.strategy_factory as strategy_factory_module
+from src.strategies.strategy_manager_repo import (
+    list_all_strategy_meta,
+    next_custom_strategy_id,
+    build_fallback_strategy_code,
+    add_custom_strategy,
+    delete_custom_strategy,
+    set_strategy_enabled
+)
 from src.utils.stock_manager import stock_manager
 
 import logging
@@ -212,6 +223,109 @@ class SourceSwitchRequest(BaseModel):
 class ConfigUpdateRequest(BaseModel):
     config: dict
 
+class StrategyToggleRequest(BaseModel):
+    strategy_id: str
+    enabled: bool
+
+class StrategyAnalyzeRequest(BaseModel):
+    template_text: str
+    strategy_name: Optional[str] = None
+    code_template: Optional[str] = None
+
+class StrategyAddRequest(BaseModel):
+    strategy_id: str
+    strategy_name: str
+    class_name: Optional[str] = None
+    code: str
+    template_text: Optional[str] = None
+    analysis_text: Optional[str] = None
+
+class StrategyDeleteRequest(BaseModel):
+    strategy_id: str
+
+class ReportDeleteRequest(BaseModel):
+    report_id: str
+
+
+def _extract_code_block(text):
+    m = re.search(r"```python\s*([\s\S]*?)```", str(text or ""), re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    m2 = re.search(r"```\s*([\s\S]*?)```", str(text or ""), re.IGNORECASE)
+    return m2.group(1).strip() if m2 else str(text or "").strip()
+
+
+def _extract_first_class_name(code_text):
+    m = re.search(r"class\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", str(code_text or ""))
+    return m.group(1) if m else ""
+
+
+def _build_ai_analysis(template_text, strategy_id, strategy_name, code_template=None):
+    cfg = ConfigLoader.reload()
+    api_key = str(cfg.get("data_provider.llm_api_key", "") or cfg.get("data_provider.api_key", "") or cfg.get("data_provider.default_api_key", "") or "").strip()
+    base_url = str(cfg.get("data_provider.llm_api_url", "") or cfg.get("data_provider.default_api_url", "") or "").strip()
+    model_name = str(cfg.get("data_provider.llm_model", "") or "").strip() or "gpt-4o-mini"
+    strategy_name = str(strategy_name or f"AI策略{strategy_id}").strip()
+    fallback_code = build_fallback_strategy_code(strategy_id, strategy_name, template_text)
+    fallback_class_name = _extract_first_class_name(fallback_code)
+    if not api_key or not base_url:
+        return {
+            "analysis_text": "未检测到可用大模型配置，已返回可执行默认策略代码。",
+            "code": fallback_code,
+            "class_name": fallback_class_name
+        }
+    url = base_url.rstrip("/")
+    if not url.endswith("/chat/completions"):
+        if url.endswith("/v1"):
+            url = f"{url}/chat/completions"
+        else:
+            url = f"{url}/v1/chat/completions"
+    system_prompt = "你是资深量化开发专家。输出必须可执行、可落地。请根据用户策略模版生成完整Python策略代码。只生成一个类，继承BaseImplementedStrategy，类中必须实现on_bar。"
+    user_prompt = (
+        f"策略ID固定为: {strategy_id}\n"
+        f"策略名称固定为: {strategy_name}\n"
+        f"请基于以下策略模版生成代码：\n{template_text}\n\n"
+        f"请尽量遵循以下代码骨架与风格约束：\n{str(code_template or '').strip()}\n\n"
+        "返回格式：先给简短分析，再给```python```代码块。代码需可直接运行于当前项目。"
+    )
+    payload = {
+        "model": model_name,
+        "temperature": 0.2,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+    }
+    try:
+        req = urllib.request.Request(
+            url=url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            raw = resp.read().decode("utf-8")
+        result = json.loads(raw)
+        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        code = _extract_code_block(content)
+        class_name = _extract_first_class_name(code)
+        if not code or not class_name:
+            return {
+                "analysis_text": "大模型返回内容未包含可执行代码，已回退默认策略代码。",
+                "code": fallback_code,
+                "class_name": fallback_class_name
+            }
+        analysis_text = re.sub(r"```[\s\S]*?```", "", str(content or "")).strip()
+        if not analysis_text:
+            analysis_text = "已完成策略分析并生成可执行代码。"
+        return {"analysis_text": analysis_text, "code": code, "class_name": class_name}
+    except Exception:
+        return {
+            "analysis_text": "大模型分析调用失败，已回退默认策略代码。",
+            "code": fallback_code,
+            "class_name": fallback_class_name
+        }
+
 # --- Routes ---
 
 @app.get("/")
@@ -245,6 +359,68 @@ async def api_strategies():
     except Exception as e:
         logger.error(f"Failed to load strategies: {e}", exc_info=True)
         return {"status": "error", "strategies": []}
+
+
+@app.get("/api/strategy_manager/list")
+async def api_strategy_manager_list():
+    try:
+        return {"status": "success", "strategies": list_all_strategy_meta()}
+    except Exception as e:
+        logger.error(f"/api/strategy_manager/list failed: {e}", exc_info=True)
+        return {"status": "error", "msg": str(e), "strategies": []}
+
+
+@app.post("/api/strategy_manager/toggle")
+async def api_strategy_manager_toggle(req: StrategyToggleRequest):
+    try:
+        set_strategy_enabled(req.strategy_id, req.enabled)
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"/api/strategy_manager/toggle failed: {e}", exc_info=True)
+        return {"status": "error", "msg": str(e)}
+
+
+@app.post("/api/strategy_manager/analyze")
+async def api_strategy_manager_analyze(req: StrategyAnalyzeRequest):
+    strategy_id = next_custom_strategy_id()
+    strategy_name = str(req.strategy_name or f"AI策略{strategy_id}").strip()
+    result = _build_ai_analysis(req.template_text, strategy_id, strategy_name, req.code_template)
+    return {
+        "status": "success",
+        "strategy_id": strategy_id,
+        "strategy_name": strategy_name,
+        "analysis_text": result.get("analysis_text", ""),
+        "code": result.get("code", ""),
+        "class_name": result.get("class_name", "")
+    }
+
+
+@app.post("/api/strategy_manager/add")
+async def api_strategy_manager_add(req: StrategyAddRequest):
+    try:
+        class_name = _extract_first_class_name(req.code) or (req.class_name or "")
+        add_custom_strategy({
+            "id": req.strategy_id,
+            "name": req.strategy_name,
+            "class_name": class_name,
+            "code": req.code,
+            "template_text": req.template_text or "",
+            "analysis_text": req.analysis_text or ""
+        })
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"/api/strategy_manager/add failed: {e}", exc_info=True)
+        return {"status": "error", "msg": str(e)}
+
+
+@app.post("/api/strategy_manager/delete")
+async def api_strategy_manager_delete(req: StrategyDeleteRequest):
+    try:
+        deleted = delete_custom_strategy(req.strategy_id)
+        return {"status": "success" if deleted else "info", "deleted": bool(deleted)}
+    except Exception as e:
+        logger.error(f"/api/strategy_manager/delete failed: {e}", exc_info=True)
+        return {"status": "error", "msg": str(e)}
 
 @app.get("/api/config")
 async def api_get_config():
@@ -385,6 +561,31 @@ async def api_report_detail(report_id: str):
     except Exception as e:
         logger.error(f"/api/report/{report_id} failed: {e}", exc_info=True)
         return {"summary": None, "ranking": [], "strategy_reports": []}
+
+
+@app.post("/api/report/delete")
+async def api_report_delete(req: ReportDeleteRequest):
+    global report_history, latest_backtest_result, latest_strategy_reports
+    rid = str(req.report_id or "").strip()
+    if not rid:
+        return {"status": "error", "msg": "report_id is required"}
+    try:
+        load_report_history()
+        before = len(report_history) if isinstance(report_history, list) else 0
+        report_history = [r for r in report_history if str(r.get("report_id")) != rid] if isinstance(report_history, list) else []
+        deleted = len(report_history) != before
+        if deleted:
+            persist_report_history()
+            latest_backtest_result = None
+            latest_strategy_reports = {}
+            if report_history and isinstance(report_history[0], dict):
+                latest_backtest_result = report_history[0].get("summary")
+                latest_strategy_reports = report_history[0].get("strategy_reports") if isinstance(report_history[0].get("strategy_reports"), dict) else {}
+            return {"status": "success", "deleted": True}
+        return {"status": "info", "deleted": False}
+    except Exception as e:
+        logger.error(f"/api/report/delete failed: {e}", exc_info=True)
+        return {"status": "error", "msg": str(e)}
 
 # --- Control Endpoints for External Systems (e.g. OpenClaw) ---
 @app.post("/api/control/start_backtest")

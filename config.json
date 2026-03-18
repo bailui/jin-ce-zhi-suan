@@ -10,7 +10,10 @@
     "enable_fallback": false,
     "tushare_token": "4ba065ecb8eebdebc93dffaef6bc051eeb3a98b46eb7d94fd697282f",
     "default_api_key": "abc123",
-    "default_api_url": "https://tactics-ireland-ash-nato.trycloudflare.com"
+    "default_api_url": "https://tactics-ireland-ash-nato.trycloudflare.com",
+    "llm_api_url": "https://integrate.api.nvidia.com/v1",
+    "llm_api_key": "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",
+    "llm_model": "minimaxai/minimax-m2.1"
   },
   "targets": [
     "301227.SZ"
