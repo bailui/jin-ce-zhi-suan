@@ -124,6 +124,36 @@ class LiBuRites:
             return 0.0
         return float(np.mean(vals))
 
+    def _compute_regime_layer_metrics(self, equity):
+        if equity is None or len(equity) < 15:
+            return {
+                "trend_state_win_ratio": 0.0,
+                "sideway_state_win_ratio": 0.0,
+                "down_state_win_ratio": 0.0,
+                "regime_layer_score": 0.0
+            }
+        ret = equity.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+        if ret.empty:
+            return {
+                "trend_state_win_ratio": 0.0,
+                "sideway_state_win_ratio": 0.0,
+                "down_state_win_ratio": 0.0,
+                "regime_layer_score": 0.0
+            }
+        bull = ret[ret > 0.003]
+        bear = ret[ret < -0.003]
+        side = ret[(ret >= -0.003) & (ret <= 0.003)]
+        bull_wr = float((bull > 0).sum() / len(bull)) if len(bull) > 0 else 0.5
+        side_wr = float((side > 0).sum() / len(side)) if len(side) > 0 else 0.5
+        bear_wr = float((bear > 0).sum() / len(bear)) if len(bear) > 0 else 0.5
+        layer_score = float(np.mean([bull_wr, side_wr, bear_wr]))
+        return {
+            "trend_state_win_ratio": bull_wr,
+            "sideway_state_win_ratio": side_wr,
+            "down_state_win_ratio": bear_wr,
+            "regime_layer_score": layer_score
+        }
+
     def _score_piecewise(self, value, thresholds):
         v = self._safe_float(value)
         for cond, score in thresholds:
@@ -155,6 +185,12 @@ class LiBuRites:
         avg_trade_amount_ratio = self._safe_float(metrics.get("avg_trade_amount_ratio", 0.0))
         monthly_stability = self._safe_float(metrics.get("monthly_stability_ratio", 0.0))
         regime_consistency = self._safe_float(metrics.get("regime_consistency_ratio", 0.0))
+        regime_layer_score = self._safe_float(metrics.get("regime_layer_score", 0.0))
+        capital_utilization_ratio = self._safe_float(metrics.get("capital_utilization_ratio", 0.0))
+        holding_efficiency_index = self._safe_float(metrics.get("holding_efficiency_index", 0.0))
+        trend_state_win_ratio = self._safe_float(metrics.get("trend_state_win_ratio", 0.0))
+        sideway_state_win_ratio = self._safe_float(metrics.get("sideway_state_win_ratio", 0.0))
+        down_state_win_ratio = self._safe_float(metrics.get("down_state_win_ratio", 0.0))
 
         score_ar = self._score_piecewise(annualized_roi, [
             (lambda x: x >= 0.30, 10),
@@ -221,18 +257,26 @@ class LiBuRites:
             (lambda x: 8 <= x < 20 or 240 < x <= 360, 3),
             (lambda x: True, 1),
         ])
-        score_capacity = self._score_piecewise(avg_trade_amount_ratio, [
-            (lambda x: x <= 0.08, 4),
-            (lambda x: x <= 0.20, 3),
-            (lambda x: x <= 0.35, 2),
-            (lambda x: True, 1),
+        score_util = self._score_piecewise(capital_utilization_ratio, [
+            (lambda x: x >= 0.45, 2.0),
+            (lambda x: x >= 0.25, 1.5),
+            (lambda x: x >= 0.12, 1.0),
+            (lambda x: True, 0.5),
         ])
+        score_hold_eff = self._score_piecewise(holding_efficiency_index, [
+            (lambda x: x >= 0.18, 2.0),
+            (lambda x: x >= 0.10, 1.5),
+            (lambda x: x >= 0.04, 1.0),
+            (lambda x: True, 0.5),
+        ])
+        score_capacity = score_util + score_hold_eff
         score_stability = self._score_piecewise(monthly_stability, [
             (lambda x: x >= 0.65, 3),
             (lambda x: x >= 0.50, 2),
             (lambda x: True, 1),
         ])
-        score_regime = self._score_piecewise(regime_consistency, [
+        regime_mix = (regime_consistency + regime_layer_score) / 2.0
+        score_regime = self._score_piecewise(regime_mix, [
             (lambda x: x >= 0.66, 3),
             (lambda x: x >= 0.33, 2),
             (lambda x: True, 1),
@@ -263,8 +307,14 @@ class LiBuRites:
                 "monthly_profit_ratio": monthly_profit_ratio,
                 "annualized_trades": annual_trades,
                 "avg_trade_amount_ratio": avg_trade_amount_ratio,
+                "capital_utilization_ratio": capital_utilization_ratio,
+                "holding_efficiency_index": holding_efficiency_index,
                 "monthly_stability_ratio": monthly_stability,
-                "regime_consistency_ratio": regime_consistency
+                "regime_consistency_ratio": regime_consistency,
+                "trend_state_win_ratio": trend_state_win_ratio,
+                "sideway_state_win_ratio": sideway_state_win_ratio,
+                "down_state_win_ratio": down_state_win_ratio,
+                "regime_layer_score": regime_layer_score
             }
         }
 
@@ -316,12 +366,24 @@ class LiBuRites:
         annualized_trades = total_trades * 252 / max(days, 1)
         avg_trade_amount = np.mean([abs(self._safe_float(t.get("amount", 0.0))) for t in transactions if self._safe_float(t.get("amount", 0.0)) > 0]) if transactions else 0.0
         avg_trade_amount_ratio = (avg_trade_amount / init_cap) if init_cap > 0 else 0.0
+        nav_df = hu_bu.get_nav_history()
+        capital_utilization_ratio = 0.0
+        if isinstance(nav_df, pd.DataFrame) and (not nav_df.empty) and ("holdings" in nav_df.columns) and ("nav" in nav_df.columns):
+            nav = pd.to_numeric(nav_df["nav"], errors="coerce")
+            holdings = pd.to_numeric(nav_df["holdings"], errors="coerce")
+            util = (holdings / nav.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan).dropna()
+            util = util.clip(lower=0.0, upper=1.5)
+            if len(util) > 0:
+                capital_utilization_ratio = float(util.mean())
         rets = equity.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
         positive_day_ratio = float((rets > 0).sum() / len(rets)) if len(rets) > 0 else 0.0
         regime_consistency_ratio = self._compute_regime_consistency_ratio(equity)
+        regime_layer = self._compute_regime_layer_metrics(equity)
         monthly_equity = equity.resample("ME").last() if len(equity) > 0 else pd.Series(dtype=float)
         monthly_ret = monthly_equity.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
         monthly_stability_ratio = float((monthly_ret > 0).sum() / len(monthly_ret)) if len(monthly_ret) > 0 else 0.0
+        util_weight = min(1.0, max(capital_utilization_ratio, 0.0) / 0.35)
+        holding_efficiency_index = float(annualized_roi * (0.5 + 0.5 * util_weight))
 
         metrics = {
             "annualized_roi": annualized_roi,
@@ -336,8 +398,14 @@ class LiBuRites:
             "monthly_profit_ratio": monthly_profit_ratio,
             "annualized_trades": annualized_trades,
             "avg_trade_amount_ratio": avg_trade_amount_ratio,
+            "capital_utilization_ratio": capital_utilization_ratio,
+            "holding_efficiency_index": holding_efficiency_index,
             "monthly_stability_ratio": monthly_stability_ratio,
-            "regime_consistency_ratio": regime_consistency_ratio
+            "regime_consistency_ratio": regime_consistency_ratio,
+            "trend_state_win_ratio": regime_layer.get("trend_state_win_ratio", 0.0),
+            "sideway_state_win_ratio": regime_layer.get("sideway_state_win_ratio", 0.0),
+            "down_state_win_ratio": regime_layer.get("down_state_win_ratio", 0.0),
+            "regime_layer_score": regime_layer.get("regime_layer_score", 0.0)
         }
         scorecard = self._build_scorecard(metrics)
 
@@ -363,8 +431,14 @@ class LiBuRites:
             "monthly_profit_ratio": float(monthly_profit_ratio),
             "annualized_trades": float(annualized_trades),
             "avg_trade_amount_ratio": float(avg_trade_amount_ratio),
+            "capital_utilization_ratio": float(capital_utilization_ratio),
+            "holding_efficiency_index": float(holding_efficiency_index),
             "monthly_stability_ratio": float(monthly_stability_ratio),
             "regime_consistency_ratio": float(regime_consistency_ratio),
+            "trend_state_win_ratio": float(regime_layer.get("trend_state_win_ratio", 0.0)),
+            "sideway_state_win_ratio": float(regime_layer.get("sideway_state_win_ratio", 0.0)),
+            "down_state_win_ratio": float(regime_layer.get("down_state_win_ratio", 0.0)),
+            "regime_layer_score": float(regime_layer.get("regime_layer_score", 0.0)),
             "positive_day_ratio": float(positive_day_ratio),
             "scorecard": scorecard,
             "score_total": float(scorecard.get("total_score", 0.0)),
@@ -443,6 +517,9 @@ class LiBuRites:
         monthly_ret = monthly_equity.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
         monthly_stability_ratio = float((monthly_ret > 0).sum() / len(monthly_ret)) if len(monthly_ret) > 0 else 0.0
         regime_consistency_ratio = self._compute_regime_consistency_ratio(equity_curve)
+        regime_layer = self._compute_regime_layer_metrics(equity_curve)
+        capital_utilization_ratio = self._safe_float(summary_metrics.get("capital_utilization_ratio"), min(1.0, max(0.0, avg_trade_amount_ratio * 1.8))) if isinstance(summary_metrics, dict) else min(1.0, max(0.0, avg_trade_amount_ratio * 1.8))
+        holding_efficiency_index = self._safe_float(summary_metrics.get("holding_efficiency_index"), annual_return * (0.5 + 0.5 * min(1.0, max(capital_utilization_ratio, 0.0) / 0.35))) if isinstance(summary_metrics, dict) else annual_return * (0.5 + 0.5 * min(1.0, max(capital_utilization_ratio, 0.0) / 0.35))
 
         metrics = {
             "annualized_roi": self._safe_float(summary_metrics.get("annualized_roi")) if isinstance(summary_metrics, dict) else annual_return,
@@ -457,8 +534,14 @@ class LiBuRites:
             "monthly_profit_ratio": self._safe_float(summary_metrics.get("monthly_profit_ratio"), monthly_profit_ratio) if isinstance(summary_metrics, dict) else monthly_profit_ratio,
             "annualized_trades": self._safe_float(summary_metrics.get("annualized_trades"), annualized_trades) if isinstance(summary_metrics, dict) else annualized_trades,
             "avg_trade_amount_ratio": self._safe_float(summary_metrics.get("avg_trade_amount_ratio"), avg_trade_amount_ratio) if isinstance(summary_metrics, dict) else avg_trade_amount_ratio,
+            "capital_utilization_ratio": self._safe_float(summary_metrics.get("capital_utilization_ratio"), capital_utilization_ratio) if isinstance(summary_metrics, dict) else capital_utilization_ratio,
+            "holding_efficiency_index": self._safe_float(summary_metrics.get("holding_efficiency_index"), holding_efficiency_index) if isinstance(summary_metrics, dict) else holding_efficiency_index,
             "monthly_stability_ratio": self._safe_float(summary_metrics.get("monthly_stability_ratio"), monthly_stability_ratio) if isinstance(summary_metrics, dict) else monthly_stability_ratio,
-            "regime_consistency_ratio": self._safe_float(summary_metrics.get("regime_consistency_ratio"), regime_consistency_ratio) if isinstance(summary_metrics, dict) else regime_consistency_ratio
+            "regime_consistency_ratio": self._safe_float(summary_metrics.get("regime_consistency_ratio"), regime_consistency_ratio) if isinstance(summary_metrics, dict) else regime_consistency_ratio,
+            "trend_state_win_ratio": self._safe_float(summary_metrics.get("trend_state_win_ratio"), regime_layer.get("trend_state_win_ratio", 0.0)) if isinstance(summary_metrics, dict) else regime_layer.get("trend_state_win_ratio", 0.0),
+            "sideway_state_win_ratio": self._safe_float(summary_metrics.get("sideway_state_win_ratio"), regime_layer.get("sideway_state_win_ratio", 0.0)) if isinstance(summary_metrics, dict) else regime_layer.get("sideway_state_win_ratio", 0.0),
+            "down_state_win_ratio": self._safe_float(summary_metrics.get("down_state_win_ratio"), regime_layer.get("down_state_win_ratio", 0.0)) if isinstance(summary_metrics, dict) else regime_layer.get("down_state_win_ratio", 0.0),
+            "regime_layer_score": self._safe_float(summary_metrics.get("regime_layer_score"), regime_layer.get("regime_layer_score", 0.0)) if isinstance(summary_metrics, dict) else regime_layer.get("regime_layer_score", 0.0)
         }
         scorecard = self._build_scorecard(metrics)
 
@@ -519,6 +602,12 @@ class LiBuRites:
             "max_win_streak": int(max_win_streak),
             "max_loss_streak": int(max_loss_streak),
             "monthly_profit_ratio": float(monthly_profit_ratio),
+            "capital_utilization_ratio": float(self._safe_float(metrics.get("capital_utilization_ratio", 0.0))),
+            "holding_efficiency_index": float(self._safe_float(metrics.get("holding_efficiency_index", 0.0))),
+            "trend_state_win_ratio": float(self._safe_float(metrics.get("trend_state_win_ratio", 0.0))),
+            "sideway_state_win_ratio": float(self._safe_float(metrics.get("sideway_state_win_ratio", 0.0))),
+            "down_state_win_ratio": float(self._safe_float(metrics.get("down_state_win_ratio", 0.0))),
+            "regime_layer_score": float(self._safe_float(metrics.get("regime_layer_score", 0.0))),
             "scorecard": scorecard,
             "trade_details": trade_details,
             "force_close_count": int(force_close_count),

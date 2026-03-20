@@ -83,6 +83,10 @@ current_backtest_trades = []
 kline_daily_cache = {}
 report_strategy_kline_cache = {}
 report_ai_review_cache = {}
+strategy_score_cache = {}
+report_detail_cache = {}
+report_history_mtime = None
+AI_REVIEW_SCHEMA_VERSION = 2
 report_history = []
 REPORTS_DIR = os.path.join("data", "reports")
 REPORTS_FILE = os.path.join(REPORTS_DIR, "backtest_reports.json")
@@ -108,28 +112,146 @@ def is_live_enabled():
     cfg = ConfigLoader.reload()
     return bool(cfg.get("system.enable_live", True))
 
-def load_report_history():
-    global report_history, latest_backtest_result, latest_strategy_reports
+def load_report_history(force=False):
+    global report_history, latest_backtest_result, latest_strategy_reports, report_history_mtime, report_detail_cache
     os.makedirs(REPORTS_DIR, exist_ok=True)
     if not os.path.exists(REPORTS_FILE):
         report_history = []
+        report_history_mtime = None
+        report_detail_cache = {}
         return
     try:
+        mtime = os.path.getmtime(REPORTS_FILE)
+        if (not force) and (report_history_mtime is not None) and (abs(float(mtime) - float(report_history_mtime)) < 1e-9):
+            return
         with open(REPORTS_FILE, "r", encoding="utf-8") as f:
             payload = json.load(f)
         report_history = payload.get("reports", [])
+        report_history_mtime = float(mtime)
+        report_detail_cache = {}
         if report_history:
             latest = report_history[0]
             latest_backtest_result = latest.get("summary")
             latest_strategy_reports = latest.get("strategy_reports", {})
+        _rebuild_strategy_score_cache()
     except Exception as e:
         logger.error(f"Failed to load report history: {e}")
         report_history = []
+        report_history_mtime = None
+        report_detail_cache = {}
+        _rebuild_strategy_score_cache()
 
 def persist_report_history():
+    global report_history_mtime, report_detail_cache
     os.makedirs(REPORTS_DIR, exist_ok=True)
     with open(REPORTS_FILE, "w", encoding="utf-8") as f:
         json.dump({"reports": report_history}, f, ensure_ascii=False, indent=2, default=str)
+    report_history_mtime = os.path.getmtime(REPORTS_FILE) if os.path.exists(REPORTS_FILE) else None
+    report_detail_cache = {}
+
+
+def _score_grade(score):
+    s = float(score or 0.0)
+    if s >= 90:
+        return "S"
+    if s >= 75:
+        return "A"
+    if s >= 60:
+        return "B"
+    return "C"
+
+
+def _sample_size_penalty_points(count):
+    c = int(count or 0)
+    if c >= 12:
+        return 0.0
+    if c >= 8:
+        return 1.0
+    if c >= 5:
+        return 3.0
+    if c >= 3:
+        return 5.0
+    if c >= 2:
+        return 8.0
+    return 12.0
+
+
+def _sample_size_confidence(count):
+    c = int(count or 0)
+    if c >= 12:
+        return 1.0
+    if c >= 8:
+        return 0.9
+    if c >= 5:
+        return 0.75
+    if c >= 3:
+        return 0.6
+    if c >= 2:
+        return 0.45
+    return 0.3
+
+
+def _rebuild_strategy_score_cache():
+    global strategy_score_cache
+    stats = {}
+    for rep in report_history if isinstance(report_history, list) else []:
+        if not isinstance(rep, dict):
+            continue
+        summary = rep.get("summary") if isinstance(rep.get("summary"), dict) else {}
+        ranking = summary.get("ranking", []) if isinstance(summary, dict) else []
+        if not isinstance(ranking, list):
+            continue
+        for row in ranking:
+            if not isinstance(row, dict):
+                continue
+            sid = str(row.get("strategy_id", "")).strip()
+            if not sid:
+                continue
+            score = row.get("score_total", None)
+            if not isinstance(score, numbers.Number):
+                continue
+            score = float(score)
+            annual = float(row.get("annualized_roi", 0.0) or 0.0)
+            dd = float(row.get("max_dd", 0.0) or 0.0)
+            tr = float(row.get("total_trades", 0.0) or 0.0)
+            x = stats.get(sid)
+            if x is None:
+                stats[sid] = {
+                    "count": 1,
+                    "score_sum": score,
+                    "annual_sum": annual,
+                    "dd_sum": dd,
+                    "trades_sum": tr,
+                    "score_total_latest": score,
+                    "rating_latest": str(row.get("rating", "")).strip() or _score_grade(score)
+                }
+            else:
+                x["count"] += 1
+                x["score_sum"] += score
+                x["annual_sum"] += annual
+                x["dd_sum"] += dd
+                x["trades_sum"] += tr
+    out = {}
+    for sid, x in stats.items():
+        cnt = max(1, int(x.get("count", 1)))
+        avg_score = float(x.get("score_sum", 0.0)) / cnt
+        penalty = _sample_size_penalty_points(cnt)
+        confidence = _sample_size_confidence(cnt)
+        adjusted = max(0.0, avg_score - penalty)
+        out[sid] = {
+            "score_total": avg_score,
+            "rating": _score_grade(adjusted),
+            "score_total_adjusted": adjusted,
+            "score_penalty_points": penalty,
+            "score_confidence": confidence,
+            "score_backtest_count": cnt,
+            "score_total_latest": float(x.get("score_total_latest", 0.0)),
+            "rating_latest": str(x.get("rating_latest", "C")),
+            "score_annualized_roi_avg": float(x.get("annual_sum", 0.0)) / cnt,
+            "score_max_dd_avg": float(x.get("dd_sum", 0.0)) / cnt,
+            "score_trades_avg": float(x.get("trades_sum", 0.0)) / cnt
+        }
+    strategy_score_cache = out
 
 def _safe_json_obj(obj):
     try:
@@ -183,6 +305,7 @@ def finalize_current_backtest_report():
     report_history = [r for r in report_history if r.get("report_id") != current_backtest_report.get("report_id")]
     report_history.insert(0, current_backtest_report)
     persist_report_history()
+    _rebuild_strategy_score_cache()
 
 def fail_current_backtest_report(msg):
     global current_backtest_report
@@ -478,30 +601,22 @@ async def api_strategies():
 async def api_strategy_manager_list():
     try:
         rows = list_all_strategy_meta()
-        ranking = []
-        if isinstance(latest_backtest_result, dict):
-            ranking = latest_backtest_result.get("ranking", []) or []
-        if (not ranking) and report_history:
-            latest_summary = (report_history[0] or {}).get("summary", {})
-            ranking = (latest_summary or {}).get("ranking", []) or []
-        score_map = {}
-        rating_map = {}
-        for r in ranking:
-            sid = str(r.get("strategy_id", "")).strip()
-            if not sid:
-                continue
-            sc = r.get("score_total", None)
-            rt = str(r.get("rating", "")).strip()
-            if isinstance(sc, numbers.Number):
-                score_map[sid] = float(sc)
-            if rt:
-                rating_map[sid] = rt
         out = []
         for row in rows:
             sid = str(row.get("id", "")).strip()
             item = dict(row)
-            item["score_total"] = score_map.get(sid, None)
-            item["rating"] = rating_map.get(sid, "")
+            sc = strategy_score_cache.get(sid, {})
+            item["score_total"] = sc.get("score_total", None)
+            item["rating"] = sc.get("rating", "")
+            item["score_total_adjusted"] = sc.get("score_total_adjusted", None)
+            item["score_penalty_points"] = sc.get("score_penalty_points", 0.0)
+            item["score_confidence"] = sc.get("score_confidence", 0.0)
+            item["score_backtest_count"] = sc.get("score_backtest_count", 0)
+            item["score_total_latest"] = sc.get("score_total_latest", None)
+            item["rating_latest"] = sc.get("rating_latest", "")
+            item["score_annualized_roi_avg"] = sc.get("score_annualized_roi_avg", 0.0)
+            item["score_max_dd_avg"] = sc.get("score_max_dd_avg", 0.0)
+            item["score_trades_avg"] = sc.get("score_trades_avg", 0.0)
             out.append(item)
         return {"status": "success", "strategies": out}
     except Exception as e:
@@ -674,6 +789,7 @@ async def api_latest_report():
         ranking = []
         summary = None
         strategy_reports = {}
+        first = {}
         if report_history and isinstance(report_history, list):
             first = report_history[0] if report_history else {}
             if isinstance(first, dict):
@@ -738,11 +854,15 @@ async def api_report_history():
 @app.get("/api/report/{report_id}")
 async def api_report_detail(report_id: str):
     try:
+        rid = str(report_id)
+        cached = report_detail_cache.get(rid)
+        if isinstance(cached, dict):
+            return cached
         load_report_history()
         for r in report_history if isinstance(report_history, list) else []:
             if not isinstance(r, dict):
                 continue
-            if str(r.get("report_id")) == str(report_id):
+            if str(r.get("report_id")) == rid:
                 summary = r.get("summary") if isinstance(r.get("summary"), dict) else None
                 ranking = summary.get("ranking", []) if summary else []
                 strategy_reports = r.get("strategy_reports") if isinstance(r.get("strategy_reports"), dict) else {}
@@ -758,11 +878,20 @@ async def api_report_detail(report_id: str):
                     "summary": summary,
                     "ranking": ranking,
                     "strategy_reports": reports,
-                    "ai_review_text": str(r.get("ai_review_text", "") or "") or str(report_ai_review_cache.get(str(report_id), "") or "")
+                    "ai_review_text": (
+                        (str(r.get("ai_review_text", "") or "") if int(r.get("ai_review_version", 0) or 0) == AI_REVIEW_SCHEMA_VERSION else "")
+                        or str(report_ai_review_cache.get(str(report_id), "") or "")
+                    ),
+                    "ai_review_version": int(r.get("ai_review_version", 0) or 0)
                 }
                 payload = _sanitize_non_finite(payload)
                 safe_payload = _safe_json_obj(payload)
                 if isinstance(safe_payload, dict):
+                    report_detail_cache[rid] = safe_payload
+                    if len(report_detail_cache) > 300:
+                        first_key = next(iter(report_detail_cache))
+                        if first_key != rid:
+                            report_detail_cache.pop(first_key, None)
                     return safe_payload
                 return {"summary": None, "ranking": [], "strategy_reports": []}
         raise HTTPException(status_code=404, detail="report not found")
@@ -783,6 +912,25 @@ def _build_ai_report_review(report_item):
     summary = report_item.get("summary") if isinstance(report_item.get("summary"), dict) else {}
     strategy_reports = report_item.get("strategy_reports") if isinstance(report_item.get("strategy_reports"), dict) else {}
     compact_reports = []
+
+    def _trade_nodes(trades, direction, max_items=8):
+        out = []
+        for t in trades:
+            if not isinstance(t, dict):
+                continue
+            if str(t.get("direction", "")).upper() != direction:
+                continue
+            out.append({
+                "dt": t.get("dt"),
+                "price": t.get("price"),
+                "quantity": t.get("quantity"),
+                "reason": t.get("reason"),
+                "pnl": t.get("pnl")
+            })
+            if len(out) >= max_items:
+                break
+        return out
+
     for sid, rep in strategy_reports.items():
         if not isinstance(rep, dict):
             continue
@@ -797,7 +945,9 @@ def _build_ai_report_review(report_item):
             "win_rate": rep.get("win_rate"),
             "total_trades": rep.get("total_trades"),
             "force_close_count": rep.get("force_close_count", 0),
-            "last_trade_reason": trades[-1].get("reason") if trades else None
+            "last_trade_reason": trades[-1].get("reason") if trades else None,
+            "buy_nodes": _trade_nodes(trades, "BUY"),
+            "sell_nodes": _trade_nodes(trades, "SELL")
         })
     req_payload = {
         "stock_code": report_item.get("stock_code"),
@@ -811,10 +961,16 @@ def _build_ai_report_review(report_item):
             url = f"{url}/chat/completions"
         else:
             url = f"{url}/v1/chat/completions"
-    system_prompt = "你是A股量化复盘分析师，请根据回测摘要给出结构化复盘：结论、问题定位、参数建议、下一次回测建议。"
+    system_prompt = "你是A股量化复盘分析师，请根据回测摘要与交易明细给出结构化复盘，必须具体到交易节点与参数值。"
     user_prompt = (
-        "请输出简洁Markdown，包含四段：\n"
-        "1) 核心结论\n2) 关键问题\n3) 参数优化建议\n4) 下一轮实验方案\n\n"
+        "请输出简洁Markdown，必须严格包含六段：\n"
+        "1) 核心结论\n"
+        "2) 关键问题\n"
+        "3) 基于交易明细的买入节点分析（逐条说明买入核心依据、信号逻辑、触发原因）\n"
+        "4) 基于交易明细的卖出节点分析（逐条说明卖出核心依据、信号逻辑、触发原因）\n"
+        "5) 参数优化建议（必须给出明确参数值，不要只给方向）\n"
+        "6) 下一轮实验方案（A/B至少两组，直接列出参数值对比）\n\n"
+        "注意：如果某段缺少交易节点，请写“本周期无该类交易节点”。\n"
         f"回测数据：\n{json.dumps(req_payload, ensure_ascii=False)}"
     )
     payload = {
@@ -852,17 +1008,22 @@ async def api_report_ai_review(report_id: str):
                 continue
             rid = str(report_id)
             cached = str(report_ai_review_cache.get(rid, "") or "").strip()
-            if cached:
+            cached_ver = int(report_ai_review_cache.get(f"{rid}__v", 0) or 0)
+            if cached and cached_ver == AI_REVIEW_SCHEMA_VERSION:
                 return {"status": "success", "report_id": report_id, "analysis": cached, "cached": True}
             cached = str(r.get("ai_review_text", "") or "").strip()
-            if cached:
+            persisted_ver = int(r.get("ai_review_version", 0) or 0)
+            if cached and persisted_ver == AI_REVIEW_SCHEMA_VERSION:
                 report_ai_review_cache[rid] = cached
+                report_ai_review_cache[f"{rid}__v"] = AI_REVIEW_SCHEMA_VERSION
                 return {"status": "success", "report_id": report_id, "analysis": cached, "cached": True}
             analysis = _build_ai_report_review(r)
             if not analysis:
                 return {"status": "error", "msg": "AI复盘生成失败，请检查模型配置"}
             report_history[idx]["ai_review_text"] = analysis
+            report_history[idx]["ai_review_version"] = AI_REVIEW_SCHEMA_VERSION
             report_ai_review_cache[rid] = analysis
+            report_ai_review_cache[f"{rid}__v"] = AI_REVIEW_SCHEMA_VERSION
             persist_report_history()
             return {"status": "success", "report_id": report_id, "analysis": analysis, "cached": False}
         return {"status": "error", "msg": "report not found"}
@@ -983,7 +1144,7 @@ async def api_report_strategy_kline_data(report_id: str, strategy_id: str):
 
 @app.post("/api/report/delete")
 async def api_report_delete(req: ReportDeleteRequest):
-    global report_history, latest_backtest_result, latest_strategy_reports, report_strategy_kline_cache, report_ai_review_cache
+    global report_history, latest_backtest_result, latest_strategy_reports, report_strategy_kline_cache, report_ai_review_cache, report_detail_cache
     rid = str(req.report_id or "").strip()
     if not rid:
         return {"status": "error", "msg": "report_id is required"}
@@ -994,8 +1155,11 @@ async def api_report_delete(req: ReportDeleteRequest):
         deleted = len(report_history) != before
         if deleted:
             report_ai_review_cache.pop(rid, None)
+            report_ai_review_cache.pop(f"{rid}__v", None)
+            report_detail_cache.pop(rid, None)
             report_strategy_kline_cache = {k: v for k, v in report_strategy_kline_cache.items() if not str(k).startswith(f"{rid}|")}
             persist_report_history()
+            _rebuild_strategy_score_cache()
             latest_backtest_result = None
             latest_strategy_reports = {}
             if report_history and isinstance(report_history[0], dict):
