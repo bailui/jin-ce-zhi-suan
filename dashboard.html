@@ -287,7 +287,7 @@
             <img src="/logo.png" alt="logo" class="h-10 w-10 object-contain rounded" />
             <div>
                 <h1 class="font-bold text-lg tracking-wide text-white">金策智算 <span class="text-trading-blue text-xs font-mono bg-blue-900/30 px-2 py-0.5 rounded">智能投研决策系统</span></h1>
-                <div class="text-[10px] text-trading-dim font-mono tracking-wider">量化投资 · 智能执行 · 风控协同</div>
+                <div class="text-[10px] text-red-500 font-mono tracking-wider">历史回测数据不代表未来收益，投资有风险</div>
             </div>
         </div>
 
@@ -990,6 +990,8 @@
         let selectedStrategyIds = [];
         let latestStrategyScores = {};
         let backtestResultRecovered = false;
+        let historySyncRunning = false;
+        let historySyncSchedulerRunning = false;
         let strategyManagerRows = [];
         let strategyManagerDetailId = null;
         let strategyManagerEditingId = null;
@@ -2428,6 +2430,29 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             const body = document.createElement('div');
             body.className = 'p-3 space-y-2';
             fields.forEach(f => body.appendChild(createBusinessField(f, cfg)));
+            if (String(title || '') === '工部数据源') {
+                const ops = document.createElement('div');
+                ops.className = 'mt-2 border border-cyan-800/60 rounded p-3 bg-slate-950/50 space-y-2';
+                ops.innerHTML = `
+                    <div class="text-[11px] text-cyan-300 font-bold">数据同步操作</div>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="history-sync-run-btn" onclick="runHistorySync()" class="bg-teal-700 hover:bg-teal-600 text-white px-3 py-1.5 rounded text-xs border border-teal-500">
+                            <i id="history-sync-run-icon" class="fa-solid fa-database"></i>
+                            <span id="history-sync-run-label">增量同步</span>
+                        </button>
+                        <button id="history-sync-scheduler-btn" onclick="toggleHistorySyncScheduler()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs border border-slate-500">
+                            <i id="history-sync-scheduler-icon" class="fa-solid fa-clock"></i>
+                            <span id="history-sync-scheduler-label">定时同步关</span>
+                        </button>
+                        <button onclick="refreshHistorySyncStatus()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded text-xs border border-slate-600">
+                            <i class="fa-solid fa-rotate"></i>
+                            <span>刷新状态</span>
+                        </button>
+                    </div>
+                    <div class="text-[10px] text-slate-400">同步范围由 history_sync 配置项控制，可先 dry_run 预览。</div>
+                `;
+                body.appendChild(ops);
+            }
             block.appendChild(body);
             return block;
         }
@@ -2520,6 +2545,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 if (data.status !== 'success') throw new Error(data.msg || '读取配置失败');
                 configDraft = data.config || {};
                 renderConfigForm(configDraft);
+                await refreshHistorySyncStatus();
                 bindConfigRealtimePreview();
                 applyConfigToBoards(configDraft);
                 if (status) status.innerText = '已加载';
@@ -2999,8 +3025,119 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 if (sourceSel && data.provider_source) sourceSel.value = data.provider_source;
                 applyLiveVisibility();
                 renderLiveStatus();
+                await refreshHistorySyncStatus();
                 await syncBoardConfig();
             } catch (_) {}
+        }
+
+        function renderHistorySyncButtons() {
+            const runBtn = document.getElementById('history-sync-run-btn');
+            const runIcon = document.getElementById('history-sync-run-icon');
+            const runLabel = document.getElementById('history-sync-run-label');
+            const schedulerBtn = document.getElementById('history-sync-scheduler-btn');
+            const schedulerIcon = document.getElementById('history-sync-scheduler-icon');
+            const schedulerLabel = document.getElementById('history-sync-scheduler-label');
+            if (runBtn && runIcon && runLabel) {
+                if (historySyncRunning) {
+                    runBtn.className = 'bg-amber-700 hover:bg-amber-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-amber-500 min-w-[128px]';
+                    runIcon.className = 'fa-solid fa-spinner';
+                    runLabel.innerText = '同步进行中';
+                } else {
+                    runBtn.className = 'bg-teal-700 hover:bg-teal-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-teal-500 min-w-[128px]';
+                    runIcon.className = 'fa-solid fa-database';
+                    runLabel.innerText = '增量同步';
+                }
+            }
+            if (schedulerBtn && schedulerIcon && schedulerLabel) {
+                if (historySyncSchedulerRunning) {
+                    schedulerBtn.className = 'bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-emerald-500 min-w-[128px]';
+                    schedulerIcon.className = 'fa-solid fa-clock-rotate-left';
+                    schedulerLabel.innerText = '定时同步开';
+                } else {
+                    schedulerBtn.className = 'bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-slate-500 min-w-[128px]';
+                    schedulerIcon.className = 'fa-solid fa-clock';
+                    schedulerLabel.innerText = '定时同步关';
+                }
+            }
+        }
+
+        async function refreshHistorySyncStatus() {
+            try {
+                const res = await fetch('/api/history_sync/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                historySyncRunning = Boolean(data?.service?.is_running);
+                historySyncSchedulerRunning = Boolean(data?.scheduler_running);
+                renderHistorySyncButtons();
+            } catch (_) {}
+        }
+
+        async function runHistorySync() {
+            if (historySyncRunning) {
+                logMessage('SYSTEM', '增量同步任务已在运行中', 'warning');
+                return;
+            }
+            historySyncRunning = true;
+            renderHistorySyncButtons();
+            try {
+                const payload = {
+                    lookback_days: 10,
+                    max_codes: 200,
+                    batch_size: 500,
+                    dry_run: false,
+                    on_duplicate: 'ignore',
+                    async_run: false
+                };
+                const res = await fetch('/api/history_sync/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok || data.status === 'error') {
+                    throw new Error(data.msg || '触发失败');
+                }
+                const report = data.report || {};
+                const missing = Number(report.total_missing_rows || 0);
+                const written = Number(report.total_written_rows || 0);
+                logMessage('SYSTEM', `增量同步完成：缺失${missing}条，写入${written}条`, 'success');
+            } catch (e) {
+                logMessage('SYSTEM', `增量同步失败: ${e}`, 'danger');
+            } finally {
+                await refreshHistorySyncStatus();
+            }
+        }
+
+        async function toggleHistorySyncScheduler() {
+            const nextOn = !historySyncSchedulerRunning;
+            try {
+                if (nextOn) {
+                    const res = await fetch('/api/history_sync/scheduler/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            interval_minutes: 60,
+                            lookback_days: 10,
+                            max_codes: 200,
+                            batch_size: 500,
+                            dry_run: false,
+                            on_duplicate: 'ignore'
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || data.status !== 'success') throw new Error(data.msg || '启动失败');
+                    logMessage('SYSTEM', '定时增量同步已开启（每60分钟）', 'success');
+                } else {
+                    const res = await fetch('/api/history_sync/scheduler/stop', { method: 'POST' });
+                    const data = await res.json();
+                    if (!res.ok || data.status !== 'success') throw new Error(data.msg || '停止失败');
+                    logMessage('SYSTEM', '定时增量同步已关闭', 'warning');
+                }
+            } catch (e) {
+                logMessage('SYSTEM', `定时同步切换失败: ${e}`, 'danger');
+            } finally {
+                await refreshHistorySyncStatus();
+            }
         }
 
         async function fetchGlobalStrategies() {

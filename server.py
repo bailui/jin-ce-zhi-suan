@@ -39,6 +39,7 @@ from src.utils.stock_manager import stock_manager
 from src.utils.data_provider import DataProvider
 from src.utils.tushare_provider import TushareProvider
 from src.utils.akshare_provider import AkshareProvider
+from src.utils.history_sync_service import HistoryDiffSyncService, TABLE_INTERVAL_MAP
 
 import logging
 
@@ -107,6 +108,8 @@ CLASSIC_PATTERN_ITEMS = [
 # Config
 config = ConfigLoader()
 intent_engine = StrategyIntentEngine()
+history_sync_service = HistoryDiffSyncService()
+history_sync_scheduler_task = None
 
 def is_live_enabled():
     cfg = ConfigLoader.reload()
@@ -423,6 +426,27 @@ class StrategyDeleteRequest(BaseModel):
 
 class ReportDeleteRequest(BaseModel):
     report_id: str
+
+class HistorySyncRunRequest(BaseModel):
+    codes: Optional[list[str]] = None
+    tables: Optional[list[str]] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    lookback_days: int = 10
+    max_codes: int = 200
+    batch_size: int = 500
+    dry_run: bool = False
+    on_duplicate: str = "ignore"
+    async_run: bool = False
+
+class HistorySyncScheduleRequest(BaseModel):
+    interval_minutes: int = 60
+    lookback_days: int = 10
+    max_codes: int = 200
+    batch_size: int = 500
+    tables: Optional[list[str]] = None
+    dry_run: bool = False
+    on_duplicate: str = "ignore"
 
 
 def _extract_code_block(text):
@@ -1315,7 +1339,11 @@ def _build_backtest_kline_payload(stock_code, start_dt, end_dt):
         if str(t.get("code", "")).replace(".SH", "").replace(".SZ", "") == symbol_plain
     ]
     strategy_ids = sorted(set(str(t.get("strategy", "")).strip() for t in trades if str(t.get("strategy", "")).strip()))
-    palette = ["#3b82f6", "#8b5cf6", "#06b6d4", "#a855f7", "#f59e0b", "#eab308", "#6366f1", "#38bdf8", "#f97316", "#d946ef", "#0ea5e9", "#7c3aed"]
+    palette = [
+        "#ff1744", "#00e676", "#2979ff", "#ffea00", "#d500f9", "#00e5ff", "#ff9100", "#00c853",
+        "#651fff", "#ff3d00", "#00b0ff", "#aeea00", "#f50057", "#76ff03", "#304ffe", "#ffd600",
+        "#aa00ff", "#64dd17", "#c51162", "#1de9b6", "#3d5afe", "#ff6d00", "#00bfa5", "#ff4081"
+    ]
     color_map = {sid: palette[i % len(palette)] for i, sid in enumerate(strategy_ids)}
     strategy_name_map = {str(x.get("id", "")): str(x.get("name", "")) for x in list_all_strategy_meta()}
     markers = []
@@ -1333,13 +1361,18 @@ def _build_backtest_kline_payload(stock_code, start_dt, end_dt):
             continue
         direction = str(t.get("dir", "")).upper()
         is_buy = direction == "BUY"
+        trade_price = t.get("price")
+        try:
+            price_text = f"{float(trade_price):.2f}"
+        except Exception:
+            price_text = ""
         markers.append({
             "time": d,
             "strategy_id": sid,
             "position": "belowBar" if is_buy else "aboveBar",
             "shape": "arrowUp" if is_buy else "arrowDown",
             "color": color_map.get(sid, "#60a5fa"),
-            "text": f"{strategy_name_map.get(sid, f'策略{sid}')} {'买' if is_buy else '卖'}"
+            "text": price_text
         })
     strategy_legends = [{"id": sid, "name": strategy_name_map.get(sid, f"策略{sid}"), "color": color_map[sid]} for sid in strategy_ids]
     return {
@@ -1639,6 +1672,92 @@ async def api_get_status():
         "current_report_error": current_backtest_report.get("error_msg") if current_backtest_report else None
     }
 
+def _history_sync_payload_from_request(req: HistorySyncRunRequest):
+    return {
+        "codes": req.codes,
+        "tables": req.tables,
+        "start_time": req.start_time,
+        "end_time": req.end_time,
+        "lookback_days": max(1, int(req.lookback_days or 1)),
+        "max_codes": max(1, int(req.max_codes or 1)),
+        "batch_size": max(1, int(req.batch_size or 1)),
+        "dry_run": bool(req.dry_run),
+        "on_duplicate": str(req.on_duplicate or "ignore"),
+    }
+
+async def _run_history_sync_once(payload: dict):
+    result = await asyncio.to_thread(history_sync_service.run_sync, payload)
+    logger.info(f"history sync finished: {result.get('status')}")
+    return result
+
+async def _history_sync_scheduler_loop():
+    while True:
+        cfg = ConfigLoader.reload()
+        interval = max(1, int(cfg.get("history_sync.interval_minutes", 60) or 60))
+        payload = {
+            "codes": cfg.get("history_sync.codes", None),
+            "tables": cfg.get("history_sync.tables", list(TABLE_INTERVAL_MAP.keys())),
+            "start_time": cfg.get("history_sync.start_time", None),
+            "end_time": cfg.get("history_sync.end_time", None),
+            "lookback_days": max(1, int(cfg.get("history_sync.lookback_days", 10) or 10)),
+            "max_codes": max(1, int(cfg.get("history_sync.max_codes", 200) or 200)),
+            "batch_size": max(1, int(cfg.get("history_sync.batch_size", 500) or 500)),
+            "dry_run": bool(cfg.get("history_sync.dry_run", False)),
+            "on_duplicate": str(cfg.get("history_sync.on_duplicate", "ignore") or "ignore"),
+        }
+        try:
+            await _run_history_sync_once(payload)
+        except Exception as e:
+            logger.error(f"history sync scheduler failed: {e}", exc_info=True)
+        await asyncio.sleep(interval * 60)
+
+@app.post("/api/history_sync/run")
+async def api_history_sync_run(req: HistorySyncRunRequest):
+    payload = _history_sync_payload_from_request(req)
+    if req.async_run:
+        asyncio.create_task(_run_history_sync_once(payload))
+        return {"status": "accepted", "msg": "history sync task started", "payload": payload}
+    return await _run_history_sync_once(payload)
+
+@app.get("/api/history_sync/status")
+async def api_history_sync_status():
+    return {
+        "status": "success",
+        "service": history_sync_service.get_status(),
+        "scheduler_running": history_sync_scheduler_task is not None and not history_sync_scheduler_task.done(),
+    }
+
+@app.post("/api/history_sync/scheduler/start")
+async def api_history_sync_scheduler_start(req: HistorySyncScheduleRequest):
+    global history_sync_scheduler_task
+    cfg = ConfigLoader.reload()
+    cfg.set("history_sync.scheduler_enabled", True)
+    cfg.set("history_sync.interval_minutes", max(1, int(req.interval_minutes or 1)))
+    cfg.set("history_sync.lookback_days", max(1, int(req.lookback_days or 1)))
+    cfg.set("history_sync.max_codes", max(1, int(req.max_codes or 1)))
+    cfg.set("history_sync.batch_size", max(1, int(req.batch_size or 1)))
+    cfg.set("history_sync.tables", req.tables if req.tables else list(TABLE_INTERVAL_MAP.keys()))
+    cfg.set("history_sync.dry_run", bool(req.dry_run))
+    cfg.set("history_sync.on_duplicate", str(req.on_duplicate or "ignore"))
+    cfg.save()
+    if history_sync_scheduler_task is None or history_sync_scheduler_task.done():
+        history_sync_scheduler_task = asyncio.create_task(_history_sync_scheduler_loop())
+    return {
+        "status": "success",
+        "msg": "history sync scheduler started",
+        "scheduler_running": True,
+    }
+
+@app.post("/api/history_sync/scheduler/stop")
+async def api_history_sync_scheduler_stop():
+    global history_sync_scheduler_task
+    cfg = ConfigLoader.reload()
+    cfg.set("history_sync.scheduler_enabled", False)
+    cfg.save()
+    if history_sync_scheduler_task and not history_sync_scheduler_task.done():
+        history_sync_scheduler_task.cancel()
+    return {"status": "success", "msg": "history sync scheduler stopped"}
+
 
 class ConnectionManager:
     def __init__(self):
@@ -1903,6 +2022,7 @@ async def emit_event_to_ws(event_type, data):
 
 @app.on_event("startup")
 async def startup_event():
+    global history_sync_scheduler_task
     logger.info("Initializing Cabinet Server...")
     load_report_history()
     _warmup_classic_pattern_thumbs()
@@ -1916,12 +2036,18 @@ async def startup_event():
     
     strategies = strategy_factory_module.create_strategies()
     logger.info(f"Loaded {len(strategies)} Strategies: {[s.name for s in strategies]}")
+    cfg = ConfigLoader.reload()
+    if bool(cfg.get("history_sync.scheduler_enabled", False)):
+        history_sync_scheduler_task = asyncio.create_task(_history_sync_scheduler_loop())
     logger.info("Server Started. Access dashboard at http://localhost:8000")
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    global history_sync_scheduler_task
     if cabinet_task:
         cabinet_task.cancel()
+    if history_sync_scheduler_task and not history_sync_scheduler_task.done():
+        history_sync_scheduler_task.cancel()
 
 if __name__ == "__main__":
     import uvicorn
