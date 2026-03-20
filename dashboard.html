@@ -2199,6 +2199,46 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             return `${(n * 100).toFixed(digits)}%`;
         }
 
+        function clamp01(v) {
+            const n = Number(v);
+            if (!Number.isFinite(n)) return 0;
+            return Math.max(0, Math.min(1, n));
+        }
+
+        function normalizeByRange(v, min, max) {
+            const n = Number(v);
+            if (!Number.isFinite(n)) return 0;
+            const span = Number(max) - Number(min);
+            if (!Number.isFinite(span) || span <= 0) return 0;
+            return clamp01((n - Number(min)) / span);
+        }
+
+        function resolveRiskLevel(cfg) {
+            const stopPct = Number(getByPath(cfg, 'risk_control.max_stop_loss_pct', 0.05));
+            const perStockPct = Number(getByPath(cfg, 'risk_control.max_pos_per_stock', 0.1));
+            const totalPosPct = Number(getByPath(cfg, 'risk_control.max_total_pos', 0.5));
+            const dayLossPct = Number(getByPath(cfg, 'risk_control.max_daily_loss_pct', 0.02));
+            const drawdownPct = Number(getByPath(cfg, 'risk_control.max_drawdown_pct', dayLossPct));
+            const toleranceScore = (
+                normalizeByRange(stopPct, 0.001, 0.3) * 0.25 +
+                normalizeByRange(perStockPct, 0.01, 1) * 0.2 +
+                normalizeByRange(totalPosPct, 0.01, 1) * 0.2 +
+                normalizeByRange(dayLossPct, 0.001, 0.2) * 0.2 +
+                normalizeByRange(drawdownPct, 0.001, 0.5) * 0.15
+            );
+            if (toleranceScore < 0.34) return { text: '保守', className: 'text-cyan-300' };
+            if (toleranceScore < 0.67) return { text: '稳健', className: 'text-trading-green' };
+            return { text: '激进', className: 'text-rose-300' };
+        }
+
+        function renderRiskLevelByConfig(cfg) {
+            const el = document.getElementById('risk-level');
+            if (!el) return;
+            const risk = resolveRiskLevel(cfg || {});
+            el.innerText = risk.text;
+            el.className = `font-mono font-bold text-lg ${risk.className}`;
+        }
+
         function applyConfigToBoards(cfg) {
             if (!cfg || typeof cfg !== 'object') return;
             const active = getByPath(cfg, 'strategies.active_ids', []);
@@ -2227,6 +2267,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             setText('cfg-gong-source', `${getByPath(cfg, 'data_provider.source', '--')}`);
             setText('cfg-gong-fallback', getByPath(cfg, 'data_provider.enable_fallback', false) ? 'ON' : 'OFF');
             setMetricText('justice-dd-limit', fmtPct(drawdownPct), drawdownPct * 100);
+            renderRiskLevelByConfig(cfg);
         }
 
         async function syncBoardConfig() {
@@ -2424,6 +2465,15 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             container.appendChild(renderStrategyParamsSection(cfg));
         }
 
+        function bindConfigRealtimePreview() {
+            const container = document.getElementById('config-form-container');
+            if (!container || container.dataset.previewBound === '1') return;
+            const refresh = () => applyConfigToBoards(collectConfigFromForm());
+            container.addEventListener('input', refresh);
+            container.addEventListener('change', refresh);
+            container.dataset.previewBound = '1';
+        }
+
         function collectConfigFromForm() {
             const out = JSON.parse(JSON.stringify(configDraft || {}));
             document.querySelectorAll('#config-form-container [data-path]').forEach(el => {
@@ -2470,6 +2520,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 if (data.status !== 'success') throw new Error(data.msg || '读取配置失败');
                 configDraft = data.config || {};
                 renderConfigForm(configDraft);
+                bindConfigRealtimePreview();
                 applyConfigToBoards(configDraft);
                 if (status) status.innerText = '已加载';
             } catch (e) {
