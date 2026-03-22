@@ -26,10 +26,22 @@ class ShangshuSheng:
         """
         Execute an order (buy/sell).
         """
-        direction = signal['direction']
+        direction = str(signal['direction']).upper()
         code = signal['code']
-        qty = int(signal['qty'])
+        qty = int(float(signal['qty']))
         hu_bu = hu_bu_account if hu_bu_account is not None else self.hu_bu
+        lot_size = 100
+        if direction not in {'BUY', 'SELL'}:
+            self.xing_bu.record_rejection(strategy_id, 'EXEC_DIR_INVALID', f"Invalid direction: {direction}", kline['dt'])
+            return False
+        if qty <= 0:
+            self.xing_bu.record_rejection(strategy_id, 'EXEC_QTY_INVALID', f"Invalid qty: {qty}", kline['dt'])
+            return False
+        if direction == 'BUY':
+            qty = (qty // lot_size) * lot_size
+            if qty < lot_size:
+                self.xing_bu.record_rejection(strategy_id, 'EXEC_LOT_BLOCK', f"BUY qty must be >= {lot_size} and lot-sized", kline['dt'])
+                return False
         
         # Simulate execution via War Ministry
         success, fill_price = self.bing_bu.match_order(signal, kline)
@@ -46,17 +58,18 @@ class ShangshuSheng:
             amount_probe = fill_price * qty
             cost_probe, _, _, _ = hu_bu.calculate_cost(amount_probe, direction, fill_price, qty)
             if amount_probe + cost_probe > cash_available:
-                lo, hi = 0, qty
+                lo, hi = 0, qty // lot_size
                 while lo < hi:
                     mid = (lo + hi + 1) // 2
-                    mid_amount = fill_price * mid
-                    mid_cost, _, _, _ = hu_bu.calculate_cost(mid_amount, direction, fill_price, mid)
+                    mid_qty = mid * lot_size
+                    mid_amount = fill_price * mid_qty
+                    mid_cost, _, _, _ = hu_bu.calculate_cost(mid_amount, direction, fill_price, mid_qty)
                     if mid_amount + mid_cost <= cash_available:
                         lo = mid
                     else:
                         hi = mid - 1
-                qty = lo
-                if qty <= 0:
+                qty = lo * lot_size
+                if qty < lot_size:
                     self.xing_bu.record_rejection(strategy_id, 'EXEC_NO_CASH', "Insufficient cash after fee/slippage", kline['dt'])
                     return False
         amount = fill_price * qty
@@ -96,14 +109,18 @@ class ShangshuSheng:
                  return False
             
             pos = self.positions[strategy_id][code]
+            pos_qty = int(pos.get('qty', 0) or 0)
+            if qty > pos_qty:
+                 self.xing_bu.record_violation(strategy_id, 'SELL_OVER_QTY', f"Sell {qty} > Holding {pos_qty}", kline['dt'])
+                 return False
+            if qty % lot_size != 0 and qty != pos_qty:
+                self.xing_bu.record_rejection(strategy_id, 'EXEC_LOT_BLOCK', f"SELL qty must be lot-sized or equal to full position ({pos_qty})", kline['dt'])
+                return False
             buy_day = str(pos.get('last_buy_day', '')).strip()
             curr_day = self._trade_day(kline.get('dt'))
             if buy_day and curr_day and buy_day == curr_day:
                 self.xing_bu.record_rejection(strategy_id, 'EXEC_T1_BLOCK', f"T+1 block: {code} bought today cannot be sold", kline['dt'])
                 return False
-            if pos['qty'] < qty:
-                 self.xing_bu.record_violation(strategy_id, 'SELL_OVER_QTY', f"Sell {qty} > Holding {pos['qty']}", kline['dt'])
-                 return False
             
             # Calculate Realized PnL
             # (Sell Price - Avg Buy Price) * Qty - Cost

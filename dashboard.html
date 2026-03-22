@@ -1023,12 +1023,25 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             self.history[code] = pd.DataFrame()
         self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(2000)
         df = self.history[code]
-        if len(df) < 60:
+        if len(df) < 80:
+            return None
+        close_series = pd.to_numeric(df['close'], errors='coerce').dropna()
+        if len(close_series) < 80:
+            return None
+        ma_fast = Indicators.MA(close_series, 12)
+        ma_slow = Indicators.MA(close_series, 36)
+        if len(ma_fast) < 2 or len(ma_slow) < 2:
             return None
         qty = int(self.positions.get(code, 0))
         close = float(kline['close'])
         buy_qty = int(self._qty())
-        if qty <= 0:
+        if buy_qty <= 0:
+            return None
+        if buy_qty % 100 != 0:
+            buy_qty = (buy_qty // 100) * 100
+        if buy_qty < 100:
+            return None
+        if qty <= 0 and float(ma_fast.iloc[-2]) <= float(ma_slow.iloc[-2]) and float(ma_fast.iloc[-1]) > float(ma_slow.iloc[-1]):
             self.last_buy_day[code] = str(pd.to_datetime(kline['dt'], errors='coerce').strftime('%Y-%m-%d'))
             return {
                 'strategy_id': self.id,
@@ -1041,8 +1054,10 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 'take_profit': None
             }
         curr_day = str(pd.to_datetime(kline['dt'], errors='coerce').strftime('%Y-%m-%d'))
-        if self.last_buy_day.get(code) == curr_day:
+        if qty > 0 and self.last_buy_day.get(code) == curr_day:
             return None
+        if qty > 0 and float(ma_fast.iloc[-2]) >= float(ma_slow.iloc[-2]) and float(ma_fast.iloc[-1]) < float(ma_slow.iloc[-1]):
+            return self.create_exit_signal(kline, qty, "MA Cross Exit")
         return None`;
         const DIAG_STATE = {
             wsConnected: false,
@@ -1309,22 +1324,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         }
 
         async function loadLatestStrategyScores() {
-            try {
-                const res = await fetch('/api/report/latest');
-                if (!res.ok) return;
-                const data = await res.json();
-                const ranking = data?.summary?.ranking;
-                if (!Array.isArray(ranking) || !ranking.length) return;
-                const map = {};
-                ranking.forEach(row => {
-                    const sid = String(row.strategy_id || '');
-                    const score = Number(row.score_total);
-                    if (sid && Number.isFinite(score)) map[sid] = score;
-                });
-                if (!Object.keys(map).length) return;
-                latestStrategyScores = map;
-                updateStrategyList(strategyCatalog, true);
-            } catch (_) {}
+            await fetchGlobalStrategies();
         }
 
         function connectWebSocket() {
@@ -1342,7 +1342,6 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 DIAG_STATE.wsConnected = true;
                 updateDebugPanel();
                 fetchGlobalStrategies();
-                loadLatestStrategyScores();
                 loadStrategyManager();
                 syncStatus();
                 wsHeartbeatTimer = setInterval(() => {
@@ -1572,11 +1571,8 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             if (preserveSelection && prevSelected.length) {
                 const ids = new Set(strategyCatalog.map(s => String(s.id)));
                 selectedStrategyIds = prevSelected.filter(id => ids.has(String(id)));
-                if (!selectedStrategyIds.length) {
-                    selectedStrategyIds = strategyCatalog.length ? [String(strategyCatalog[0].id)] : [];
-                }
             } else {
-                selectedStrategyIds = strategyCatalog.length ? [String(strategyCatalog[0].id)] : [];
+                selectedStrategyIds = [];
             }
             const scoreColor = (score) => {
                 const s = Math.max(0, Math.min(100, Number(score || 0)));
@@ -1652,10 +1648,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         }
 
         function applyStrategySelection() {
-            let picked = getSelectedStrategiesFromUI();
-            if (!picked.length && strategyCatalog.length) {
-                picked = [String(strategyCatalog[0].id)];
-            }
+            const picked = getSelectedStrategiesFromUI();
             selectedStrategyIds = picked;
             const allBox = document.getElementById('strategy-all-checkbox');
             if (allBox) allBox.checked = picked.length === strategyCatalog.length;
@@ -3145,11 +3138,32 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         }
 
         async function fetchGlobalStrategies() {
+            const preserveSelection = Array.isArray(strategyCatalog) && strategyCatalog.length > 0;
+            try {
+                const res = await fetch('/api/strategy_manager/list');
+                const data = await res.json();
+                if (data && data.status === 'success' && Array.isArray(data.strategies) && data.strategies.length) {
+                    const scoreMap = {};
+                    const strategies = data.strategies
+                        .filter(row => row && row.enabled !== false)
+                        .map(row => {
+                            const sid = String(row.id || '').trim();
+                            const sname = String(row.name || sid);
+                            const score = Number(row.score_total);
+                            if (sid && Number.isFinite(score)) scoreMap[sid] = score;
+                            return { id: sid, name: sname };
+                        })
+                        .filter(row => String(row.id || '').trim());
+                    latestStrategyScores = scoreMap;
+                    updateStrategyList(strategies, preserveSelection);
+                    return;
+                }
+            } catch (_) {}
             try {
                 const res = await fetch('/api/strategies');
                 const data = await res.json();
                 if (data && data.status === 'success' && Array.isArray(data.strategies) && data.strategies.length) {
-                    updateStrategyList(data.strategies);
+                    updateStrategyList(data.strategies, preserveSelection);
                     return;
                 }
             } catch (_) {}
@@ -3998,17 +4012,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             document.getElementById('bt-period').innerText = data.period;
             document.getElementById('bt-trades').innerText = data.total_trades;
             
-            if (Array.isArray(data.ranking)) {
-                const map = {};
-                data.ranking.forEach(row => {
-                    const sid = String(row.strategy_id || '');
-                    if (!sid) return;
-                    const score = Number(row.score_total);
-                    if (Number.isFinite(score)) map[sid] = score;
-                });
-                latestStrategyScores = map;
-                updateStrategyList(strategyCatalog, true);
-            }
+            fetchGlobalStrategies();
 
             const best = data.ranking[0];
             if (best) {

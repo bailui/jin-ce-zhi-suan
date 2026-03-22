@@ -475,7 +475,19 @@ def _apply_kline_type_to_code(code_text, kline_type):
     pattern = r"trigger_timeframe\s*=\s*['\"][^'\"]+['\"]"
     if re.search(pattern, code):
         return re.sub(pattern, f'trigger_timeframe="{tf}"', code, count=1)
-    return code
+    super_pattern = r"super\(\)\.__init__\((.*?)\)"
+    m = re.search(super_pattern, code, flags=re.DOTALL)
+    if not m:
+        return code
+    args_text = str(m.group(1) or "")
+    if "trigger_timeframe" in args_text:
+        return code
+    new_args = args_text.strip()
+    if new_args:
+        new_args = f"{new_args}, trigger_timeframe=\"{tf}\""
+    else:
+        new_args = f"trigger_timeframe=\"{tf}\""
+    return code[:m.start(1)] + new_args + code[m.end(1):]
 
 
 def _build_ai_analysis(strategy_intent, strategy_id, strategy_name, code_template=None):
@@ -782,7 +794,9 @@ async def api_strategy_manager_analyze_market(req: StrategyMarketAnalyzeRequest)
 @app.post("/api/strategy_manager/add")
 async def api_strategy_manager_add(req: StrategyAddRequest):
     try:
-        class_name = _extract_first_class_name(req.code) or (req.class_name or "")
+        kline_type = _normalize_kline_type(req.kline_type)
+        code_text = _apply_kline_type_to_code(req.code, kline_type)
+        class_name = _extract_first_class_name(code_text) or (req.class_name or "")
         strategy_intent = req.strategy_intent
         if not isinstance(strategy_intent, dict):
             strategy_intent = intent_engine.from_human_input(req.template_text or req.analysis_text or req.strategy_name).to_dict()
@@ -790,12 +804,12 @@ async def api_strategy_manager_add(req: StrategyAddRequest):
             "id": req.strategy_id,
             "name": req.strategy_name,
             "class_name": class_name,
-            "code": req.code,
+            "code": code_text,
             "template_text": req.template_text or "",
             "analysis_text": req.analysis_text or "",
             "strategy_intent": strategy_intent,
             "source": req.source or "",
-            "kline_type": _normalize_kline_type(req.kline_type),
+            "kline_type": kline_type,
             "raw_requirement_title": req.raw_requirement_title or "",
             "raw_requirement": req.raw_requirement or ""
         })
@@ -814,9 +828,12 @@ async def api_strategy_manager_update(req: StrategyUpdateRequest):
         if req.class_name is not None:
             payload["class_name"] = req.class_name
         if req.code is not None:
-            payload["code"] = req.code
+            code_text = req.code
+            if req.kline_type is not None:
+                code_text = _apply_kline_type_to_code(code_text, req.kline_type)
+            payload["code"] = code_text
             if not req.class_name:
-                payload["class_name"] = _extract_first_class_name(req.code)
+                payload["class_name"] = _extract_first_class_name(code_text)
         if req.analysis_text is not None:
             payload["analysis_text"] = req.analysis_text
         if req.source is not None:

@@ -87,6 +87,11 @@ def infer_kline_type_from_code(code_text):
     return "1min"
 
 
+def normalize_kline_type(value):
+    txt = str(value or "").strip()
+    return txt or "1min"
+
+
 def load_custom_strategies():
     ensure_strategy_store()
     try:
@@ -295,6 +300,9 @@ def add_custom_strategy(entry):
     sid = str(entry.get("id", "")).strip()
     if not sid:
         raise ValueError("strategy id is required")
+    builtin_ids = {str(x.get("id", "")).strip() for x in list_builtin_strategy_meta()}
+    if sid in builtin_ids:
+        raise ValueError(f"strategy id conflicts with builtin strategy: {sid}")
     if any(str(r.get("id", "")).strip() == sid for r in rows):
         raise ValueError(f"strategy id already exists: {sid}")
     intent_payload = entry.get("strategy_intent")
@@ -312,12 +320,14 @@ def add_custom_strategy(entry):
     raw_requirement = str(entry.get("raw_requirement", "")).strip()
     if not raw_requirement:
         raw_requirement = str(entry.get("template_text", "")).strip()
+    kline_type = normalize_kline_type(entry.get("kline_type"))
     now = datetime.now().isoformat(timespec="seconds")
     row = {
         "id": sid,
         "name": str(entry.get("name", sid)),
         "class_name": str(entry.get("class_name", "")),
         "code": str(entry.get("code", "")),
+        "kline_type": kline_type,
         "template_text": str(entry.get("template_text", "")),
         "analysis_text": str(entry.get("analysis_text", "")),
         "source": source,
@@ -407,6 +417,10 @@ def update_custom_strategy(entry):
         row["class_name"] = str(entry.get("class_name", "")).strip()
     if "code" in entry:
         row["code"] = str(entry.get("code", ""))
+        if "kline_type" not in entry:
+            row["kline_type"] = infer_kline_type_from_code(row.get("code", ""))
+    if "kline_type" in entry:
+        row["kline_type"] = normalize_kline_type(entry.get("kline_type"))
     if "analysis_text" in entry:
         row["analysis_text"] = str(entry.get("analysis_text", ""))
     if "raw_requirement" in entry:
