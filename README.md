@@ -46,6 +46,9 @@
 - 数据源可切换：AkShare / Tushare / 默认 API
 - 可视化运维：`server.py + dashboard.html` 提供操作面板
 
+<img width="2508" height="1431" alt="image" src="https://github.com/user-attachments/assets/dce52494-76c8-4c4b-ba22-772dd9cb8e83" />
+
+
 ![](C:\Users\scott\AppData\Roaming\marktext\images\2026-03-23-22-14-57-image.png)
 
 ## 架构设计
