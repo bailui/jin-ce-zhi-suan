@@ -2,6 +2,8 @@
 import tushare as ts
 import pandas as pd
 from datetime import datetime, timedelta
+import os
+from src.utils.config_loader import ConfigLoader
 
 class TushareProvider:
     """
@@ -10,6 +12,13 @@ class TushareProvider:
     def __init__(self, token=None):
         # Default to a placeholder token if none provided. User must replace this.
         self.token = token
+        cfg = ConfigLoader.reload()
+        self._cache_enabled = bool(cfg.get("data_provider.local_cache_enabled", True))
+        cache_dir = str(cfg.get("data_provider.local_cache_dir", "data/history/cache") or "data/history/cache")
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(base_dir))
+        self._cache_dir = cache_dir if os.path.isabs(cache_dir) else os.path.join(project_root, cache_dir)
+        os.makedirs(self._cache_dir, exist_ok=True)
         import tushare.pro.client as client
         client.DataApi._DataApi__http_url = "http://tushare.xyz"
         if self.token:
@@ -18,6 +27,68 @@ class TushareProvider:
         else:
             self.pro = None
             print("⚠️ Warning: Tushare Token not provided. Please initialize with a valid token.")
+
+    def _cache_file_path(self, code, interval="1min"):
+        safe_code = str(code).upper().replace(".", "_")
+        return os.path.join(self._cache_dir, f"tushare_{safe_code}_{interval}.csv")
+
+    def _normalize_minutes_df(self, df):
+        if df is None or df.empty:
+            return pd.DataFrame()
+        work = df.copy()
+        if "trade_time" in work.columns and "dt" not in work.columns:
+            work = work.rename(columns={"trade_time": "dt"})
+        if "ts_code" in work.columns and "code" not in work.columns:
+            work = work.rename(columns={"ts_code": "code"})
+        required_cols = ["code", "open", "high", "low", "close", "vol", "amount", "dt"]
+        for c in required_cols:
+            if c not in work.columns:
+                return pd.DataFrame()
+        work["dt"] = pd.to_datetime(work["dt"])
+        for c in ["open", "high", "low", "close", "vol", "amount"]:
+            work[c] = pd.to_numeric(work[c], errors="coerce")
+        work = work.dropna(subset=["dt", "open", "high", "low", "close"])
+        work = work.drop_duplicates(subset=["dt"]).sort_values("dt").reset_index(drop=True)
+        return work[["code", "dt", "open", "high", "low", "close", "vol", "amount"]]
+
+    def _load_cached_minute_data(self, code, start_time, end_time):
+        if not self._cache_enabled:
+            return pd.DataFrame(), False
+        path = self._cache_file_path(code, "1min")
+        if not os.path.exists(path):
+            return pd.DataFrame(), False
+        try:
+            df = pd.read_csv(path)
+            if "dt" in df.columns:
+                df["dt"] = pd.to_datetime(df["dt"])
+            df = self._normalize_minutes_df(df)
+            if df.empty:
+                return pd.DataFrame(), False
+            full_coverage = df["dt"].min() <= start_time and df["dt"].max() >= end_time
+            df_range = df[(df["dt"] >= start_time) & (df["dt"] <= end_time)].copy()
+            return df_range, bool(full_coverage and not df_range.empty)
+        except Exception:
+            return pd.DataFrame(), False
+
+    def _save_minute_cache(self, code, df):
+        if not self._cache_enabled or df is None or df.empty:
+            return
+        path = self._cache_file_path(code, "1min")
+        try:
+            df_save = self._normalize_minutes_df(df)
+            if df_save.empty:
+                return
+            if os.path.exists(path):
+                old_df = pd.read_csv(path)
+                if "dt" in old_df.columns:
+                    old_df["dt"] = pd.to_datetime(old_df["dt"])
+                old_df = self._normalize_minutes_df(old_df)
+                if not old_df.empty:
+                    df_save = pd.concat([old_df, df_save], ignore_index=True)
+                    df_save = self._normalize_minutes_df(df_save)
+            df_save.to_csv(path, index=False, encoding="utf-8")
+        except Exception:
+            return
 
     def set_token(self, token):
         self.token = token
@@ -139,9 +210,17 @@ class TushareProvider:
         """
         if not self.pro:
             return pd.DataFrame()
+        cached_df, cache_hit = self._load_cached_minute_data(code, start_time, end_time)
+        if cache_hit:
+            return cached_df
+        fetch_start = start_time
+        if not cached_df.empty:
+            fetch_start = cached_df["dt"].max() + timedelta(minutes=1)
+            if fetch_start > end_time:
+                return cached_df
             
         # Format dates: YYYY-MM-DD HH:MM:SS
-        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        start_str = fetch_start.strftime("%Y-%m-%d %H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
         
         try:
@@ -152,29 +231,17 @@ class TushareProvider:
             
             if df is None or df.empty:
                 print(f"⚠️ Tushare stk_mins returned empty for {code}.")
-                return pd.DataFrame()
+                return cached_df if not cached_df.empty else pd.DataFrame()
                 
             # Columns: ts_code, trade_time, open, close, high, low, vol, amount
             # Rename
-            df = df.rename(columns={
-                'ts_code': 'code',
-                'trade_time': 'dt'
-            })
-            
-            # Ensure datetime
-            df['dt'] = pd.to_datetime(df['dt'])
-            
-            # Ensure numeric types
-            numeric_cols = ['open', 'close', 'high', 'low', 'vol', 'amount']
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-            # Sort ascending (Tushare usually returns descending)
-            df = df.sort_values('dt').reset_index(drop=True)
-            
+            df = self._normalize_minutes_df(df)
+            if not cached_df.empty:
+                df = pd.concat([cached_df, df], ignore_index=True)
+                df = self._normalize_minutes_df(df)
+            self._save_minute_cache(code, df)
             return df
             
         except Exception as e:
             print(f"Error fetching Tushare history: {e}")
-            return pd.DataFrame()
+            return cached_df if not cached_df.empty else pd.DataFrame()

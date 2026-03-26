@@ -1,14 +1,80 @@
 # src/utils/akshare_provider.py
 import akshare as ak
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+import os
+from src.utils.config_loader import ConfigLoader
 
 class AkshareProvider:
     """
     Akshare Data Provider (Open Source, Free)
     """
     def __init__(self):
-        pass
+        cfg = ConfigLoader.reload()
+        self._cache_enabled = bool(cfg.get("data_provider.local_cache_enabled", True))
+        cache_dir = str(cfg.get("data_provider.local_cache_dir", "data/history/cache") or "data/history/cache")
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(base_dir))
+        self._cache_dir = cache_dir if os.path.isabs(cache_dir) else os.path.join(project_root, cache_dir)
+        os.makedirs(self._cache_dir, exist_ok=True)
+
+    def _cache_file_path(self, code, interval="1min"):
+        safe_code = str(code).upper().replace(".", "_")
+        return os.path.join(self._cache_dir, f"akshare_{safe_code}_{interval}.csv")
+
+    def _normalize_minutes_df(self, df):
+        if df is None or df.empty:
+            return pd.DataFrame()
+        work = df.copy()
+        required_cols = ["code", "open", "high", "low", "close", "vol", "amount", "dt"]
+        for c in required_cols:
+            if c not in work.columns:
+                return pd.DataFrame()
+        work["dt"] = pd.to_datetime(work["dt"])
+        for c in ["open", "high", "low", "close", "vol", "amount"]:
+            work[c] = pd.to_numeric(work[c], errors="coerce")
+        work = work.dropna(subset=["dt", "open", "high", "low", "close"])
+        work = work.drop_duplicates(subset=["dt"]).sort_values("dt").reset_index(drop=True)
+        return work[["code", "dt", "open", "high", "low", "close", "vol", "amount"]]
+
+    def _load_cached_minute_data(self, code, start_time, end_time):
+        if not self._cache_enabled:
+            return pd.DataFrame(), False
+        path = self._cache_file_path(code, "1min")
+        if not os.path.exists(path):
+            return pd.DataFrame(), False
+        try:
+            df = pd.read_csv(path)
+            if "dt" in df.columns:
+                df["dt"] = pd.to_datetime(df["dt"])
+            df = self._normalize_minutes_df(df)
+            if df.empty:
+                return pd.DataFrame(), False
+            full_coverage = df["dt"].min() <= start_time and df["dt"].max() >= end_time
+            df_range = df[(df["dt"] >= start_time) & (df["dt"] <= end_time)].copy()
+            return df_range, bool(full_coverage and not df_range.empty)
+        except Exception:
+            return pd.DataFrame(), False
+
+    def _save_minute_cache(self, code, df):
+        if not self._cache_enabled or df is None or df.empty:
+            return
+        path = self._cache_file_path(code, "1min")
+        try:
+            df_save = self._normalize_minutes_df(df)
+            if df_save.empty:
+                return
+            if os.path.exists(path):
+                old_df = pd.read_csv(path)
+                if "dt" in old_df.columns:
+                    old_df["dt"] = pd.to_datetime(old_df["dt"])
+                old_df = self._normalize_minutes_df(old_df)
+                if not old_df.empty:
+                    df_save = pd.concat([old_df, df_save], ignore_index=True)
+                    df_save = self._normalize_minutes_df(df_save)
+            df_save.to_csv(path, index=False, encoding="utf-8")
+        except Exception:
+            return
 
     def get_latest_bar(self, code):
         """
@@ -89,9 +155,17 @@ class AkshareProvider:
         """
         Fetch historical minute data via Akshare (EastMoney).
         """
+        cached_df, cache_hit = self._load_cached_minute_data(code, start_time, end_time)
+        if cache_hit:
+            return cached_df
+        fetch_start = start_time
+        if not cached_df.empty:
+            fetch_start = cached_df["dt"].max() + timedelta(minutes=1)
+            if fetch_start > end_time:
+                return cached_df
         symbol = code.split('.')[0]
         # Akshare expects "YYYY-MM-DD HH:MM:SS" for minute data
-        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        start_str = fetch_start.strftime("%Y-%m-%d %H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
         
         # Akshare stock_zh_a_hist_min_em seems to expect 'start_date' and 'end_date' in "YYYY-MM-DD HH:MM:SS"
@@ -127,7 +201,7 @@ class AkshareProvider:
             
             if df is None or df.empty:
                 print(f"⚠️ Akshare returned empty data for {symbol}.")
-                return pd.DataFrame()
+                return cached_df if not cached_df.empty else pd.DataFrame()
                 
             # Rename columns to standard format
             # Akshare columns: "时间", "开盘", "收盘", "最高", "最低", "成交量", "成交额", "振幅", "涨跌幅", "涨跌额", "换手率"
@@ -148,16 +222,13 @@ class AkshareProvider:
             mask = (df['dt'] >= start_time) & (df['dt'] <= end_time)
             df = df.loc[mask]
             
-            # Sort
-            df = df.sort_values('dt').reset_index(drop=True)
-            
-            # Ensure float types
-            cols = ['open', 'high', 'low', 'close', 'vol', 'amount']
-            for col in cols:
-                df[col] = df[col].astype(float)
-                
-            return df[['code', 'dt', 'open', 'high', 'low', 'close', 'vol', 'amount']]
+            df = self._normalize_minutes_df(df[['code', 'dt', 'open', 'high', 'low', 'close', 'vol', 'amount']])
+            if not cached_df.empty:
+                df = pd.concat([cached_df, df], ignore_index=True)
+                df = self._normalize_minutes_df(df)
+            self._save_minute_cache(code, df)
+            return df
             
         except Exception as e:
             print(f"❌ Error fetching Akshare history: {e}")
-            return pd.DataFrame()
+            return cached_df if not cached_df.empty else pd.DataFrame()

@@ -108,6 +108,55 @@ class BacktestCabinet:
             return "D"
         return x
 
+    def _build_provider(self, source):
+        if source == 'tushare':
+            return TushareProvider(token=self.config.get("data_provider.tushare_token"))
+        if source == 'akshare':
+            return AkshareProvider()
+        return DataProvider()
+
+    def _check_provider_connectivity(self, provider, provider_source):
+        try:
+            if hasattr(provider, "check_connectivity"):
+                ok, msg = provider.check_connectivity(self.stock_code)
+                return bool(ok), str(msg or "")
+            if provider_source == "tushare":
+                pro = getattr(provider, "pro", None)
+                if pro is None:
+                    return False, "tushare_token 未配置"
+                now = datetime.now()
+                start_time = now - timedelta(days=3)
+                pro.stk_mins(
+                    ts_code=self.stock_code,
+                    freq='1min',
+                    start_date=start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    end_date=now.strftime("%Y-%m-%d %H:%M:%S")
+                )
+                return True, "ok"
+            if provider_source == "akshare":
+                bar = provider.get_latest_bar(self.stock_code)
+                if bar:
+                    return True, "ok"
+                return False, "akshare 连通性检查失败（未返回最新行情）"
+            if provider_source == "default":
+                if hasattr(provider, "_request_get") and hasattr(provider, "_code_variants"):
+                    now = datetime.now()
+                    start_time = now - timedelta(days=3)
+                    for c in provider._code_variants(self.stock_code):
+                        params = {
+                            "code": c,
+                            "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "end_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+                            "limit": 1
+                        }
+                        resp = provider._request_get("/market/minutes", params, timeout=10)
+                        if resp is not None:
+                            return True, "ok"
+                    return False, getattr(provider, "last_error", "") or "default 数据源连通性检查失败"
+            return False, f"未知数据源: {provider_source}"
+        except Exception as e:
+            return False, str(e)
+
     def _compute_portfolio_snapshot(self, current_prices):
         holdings_value = 0.0
         cash_total = 0.0
@@ -333,12 +382,45 @@ class BacktestCabinet:
             stage_started_at = perf_counter()
             provider_source = self.config.get("data_provider.source", "default")
             enable_fallback = bool(self.config.get("data_provider.enable_fallback", False))
-            if provider_source == 'tushare':
-                provider = TushareProvider(token=self.config.get("data_provider.tushare_token"))
-            elif provider_source == 'akshare':
-                provider = AkshareProvider()
-            else:
-                provider = DataProvider()
+            provider = self._build_provider(provider_source)
+            await self._emit('backtest_progress', {
+                'progress': 4,
+                'phase': 'data_fetch',
+                'phase_label': '检查数据源连通性',
+                'current_date': f'{start_date.date()} ~ {end_date.date()}'
+            })
+            await self._emit('backtest_flow', {'module': '工部', 'level': 'system', 'msg': f'数据获取阶段：连通性检查 {provider_source}'})
+            ok, reason = self._check_provider_connectivity(provider, provider_source)
+            if not ok and enable_fallback:
+                await self._emit('backtest_flow', {'module': '工部', 'level': 'warning', 'msg': f'主数据源连通性检查失败，开始回退。原因: {reason}'})
+                fallback_sources = []
+                token = self.config.get("data_provider.tushare_token")
+                if provider_source != 'tushare' and token:
+                    fallback_sources.append('tushare')
+                if provider_source != 'akshare':
+                    fallback_sources.append('akshare')
+                for src in fallback_sources:
+                    candidate = self._build_provider(src)
+                    candidate_ok, candidate_reason = self._check_provider_connectivity(candidate, src)
+                    if candidate_ok:
+                        provider = candidate
+                        provider_source = src
+                        ok = True
+                        reason = "ok"
+                        await self._emit('backtest_flow', {'module': '工部', 'level': 'warning', 'msg': f'连通性回退成功，切换到 {src}'})
+                        break
+                    await self._emit('backtest_flow', {'module': '工部', 'level': 'warning', 'msg': f'候选数据源 {src} 连通性失败: {candidate_reason}'})
+            if not ok:
+                fail_msg = f"数据源连通性检查失败，回测终止。来源={provider_source} 原因={reason}"
+                await self._emit('system', {'msg': f"❌ {fail_msg}"})
+                await self._emit('backtest_failed', {
+                    'msg': fail_msg,
+                    'stock': self.stock_code,
+                    'period': f"{start_date.date()} - {end_date.date()}",
+                    'provider_source': provider_source
+                })
+                return
+            await self._emit('backtest_flow', {'module': '工部', 'level': 'success', 'msg': f'数据源连通性检查通过: {provider_source}'})
             df = self._cache_get(start_date, end_date, "1min", provider_source)
             if df.empty:
                 await self._emit('backtest_progress', {

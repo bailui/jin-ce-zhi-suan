@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import time
+import os
 from src.utils.config_loader import ConfigLoader
 from src.utils.indicators import Indicators
 
@@ -16,6 +17,12 @@ class DataProvider:
         self.base_url = (base_url or cfg.get("data_provider.default_api_url", "")).rstrip("/")
         self.headers = {"X-API-Key": self.api_key} if self.api_key else {}
         self.last_error = ""
+        self._cache_enabled = bool(cfg.get("data_provider.local_cache_enabled", True))
+        cache_dir = str(cfg.get("data_provider.local_cache_dir", "data/history/cache") or "data/history/cache")
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(base_dir))
+        self._cache_dir = cache_dir if os.path.isabs(cache_dir) else os.path.join(project_root, cache_dir)
+        os.makedirs(self._cache_dir, exist_ok=True)
 
     def _header_candidates(self):
         if not self.api_key:
@@ -101,6 +108,67 @@ class DataProvider:
 
     def _normalize_ohlcv_df(self, df):
         return self._normalize_minutes_df(df)
+
+    def _cache_file_path(self, code, interval="1min"):
+        safe_code = str(code).upper().replace(".", "_")
+        return os.path.join(self._cache_dir, f"default_{safe_code}_{interval}.csv")
+
+    def _load_cached_minute_data(self, code, start_time, end_time):
+        if not self._cache_enabled:
+            return pd.DataFrame(), False
+        path = self._cache_file_path(code, "1min")
+        if not os.path.exists(path):
+            return pd.DataFrame(), False
+        try:
+            df = pd.read_csv(path)
+            if "dt" in df.columns:
+                df["dt"] = pd.to_datetime(df["dt"])
+            df = self._normalize_minutes_df(df)
+            if df.empty:
+                return pd.DataFrame(), False
+            full_coverage = df["dt"].min() <= start_time and df["dt"].max() >= end_time
+            df_range = df[(df["dt"] >= start_time) & (df["dt"] <= end_time)].copy()
+            return df_range, bool(full_coverage and not df_range.empty)
+        except Exception:
+            return pd.DataFrame(), False
+
+    def _save_minute_cache(self, code, df):
+        if not self._cache_enabled or df is None or df.empty:
+            return
+        path = self._cache_file_path(code, "1min")
+        try:
+            df_save = self._normalize_minutes_df(df.copy())
+            if df_save.empty:
+                return
+            if os.path.exists(path):
+                old_df = pd.read_csv(path)
+                if "dt" in old_df.columns:
+                    old_df["dt"] = pd.to_datetime(old_df["dt"])
+                old_df = self._normalize_minutes_df(old_df)
+                if not old_df.empty:
+                    df_save = pd.concat([old_df, df_save], ignore_index=True)
+                    df_save = self._normalize_minutes_df(df_save)
+            df_save.to_csv(path, index=False, encoding="utf-8")
+        except Exception:
+            return
+
+    def check_connectivity(self, code):
+        now = datetime.now()
+        start_time = now - timedelta(days=3)
+        params_list = []
+        for c in self._code_variants(code):
+            params_list.append({
+                "code": c,
+                "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "end_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "limit": 1
+            })
+        for params in params_list:
+            resp = self._request_get("/market/minutes", params, timeout=10)
+            if resp is not None:
+                return True, "ok"
+        msg = self.last_error or "default 数据源连通性检查失败"
+        return False, msg
 
     def _interval_table_name(self, interval):
         mapping = {
@@ -203,8 +271,15 @@ class DataProvider:
         Fetch 1-minute data for a single stock within a time range.
         Handles pagination automatically.
         """
+        cached_df, cache_hit = self._load_cached_minute_data(code, start_time, end_time)
+        if cache_hit:
+            return cached_df
         all_data = []
         current_start = start_time
+        if not cached_df.empty:
+            current_start = cached_df["dt"].max() + timedelta(minutes=1)
+            if current_start > end_time:
+                return cached_df
         limit = 20000 # Max limit per API spec
         
         print(f"Fetching data for {code} from {start_time} to {end_time}...")
@@ -281,10 +356,12 @@ class DataProvider:
                 break
                 
         if not all_data:
-            return pd.DataFrame()
-            
+            return cached_df if not cached_df.empty else pd.DataFrame()
         final_df = pd.concat(all_data, ignore_index=True)
+        if not cached_df.empty:
+            final_df = pd.concat([cached_df, final_df], ignore_index=True)
         final_df = self._normalize_minutes_df(final_df)
+        self._save_minute_cache(code, final_df)
         return final_df
 
     def fetch_batch_data(self, codes, start_time, end_time):
