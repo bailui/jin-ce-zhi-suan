@@ -32,7 +32,9 @@ from src.strategies.strategy_manager_repo import (
     add_custom_strategy,
     update_custom_strategy,
     delete_strategy,
-    set_strategy_enabled
+    set_strategy_enabled,
+    list_strategy_dependents,
+    is_builtin_strategy_id
 )
 from src.strategy_intent.intent_engine import StrategyIntentEngine
 from src.utils.stock_manager import stock_manager
@@ -598,6 +600,9 @@ class StrategyAddRequest(BaseModel):
     kline_type: Optional[str] = None
     raw_requirement_title: Optional[str] = None
     raw_requirement: Optional[str] = None
+    depends_on: Optional[list[str]] = None
+    protect_level: Optional[str] = None
+    immutable: Optional[bool] = None
 
 
 class StrategyUpdateRequest(BaseModel):
@@ -610,9 +615,13 @@ class StrategyUpdateRequest(BaseModel):
     kline_type: Optional[str] = None
     raw_requirement_title: Optional[str] = None
     raw_requirement: Optional[str] = None
+    depends_on: Optional[list[str]] = None
+    protect_level: Optional[str] = None
+    immutable: Optional[bool] = None
 
 class StrategyDeleteRequest(BaseModel):
     strategy_id: str
+    force: bool = False
 
 class ReportDeleteRequest(BaseModel):
     report_id: str
@@ -678,6 +687,55 @@ def _apply_kline_type_to_code(code_text, kline_type):
     else:
         new_args = f"trigger_timeframe=\"{tf}\""
     return code[:m.start(1)] + new_args + code[m.end(1):]
+
+
+def _normalize_depends_on(values):
+    if not isinstance(values, list):
+        return []
+    out = []
+    seen = set()
+    for item in values:
+        sid = str(item or "").strip()
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        out.append(sid)
+    return out
+
+
+def _protected_strategy_ids():
+    raw = str(os.environ.get("STRATEGY_BASELINE_IDS", "34,34A4,34A5,34R1") or "").strip()
+    out = set()
+    for item in raw.split(","):
+        sid = str(item or "").strip()
+        if sid:
+            out.add(sid)
+    return out
+
+
+def _find_strategy_meta(strategy_id):
+    sid = str(strategy_id or "").strip()
+    if not sid:
+        return None
+    for row in list_all_strategy_meta():
+        if str(row.get("id", "")).strip() == sid:
+            return row
+    return None
+
+
+def _is_protected_strategy(strategy_id):
+    sid = str(strategy_id or "").strip()
+    if not sid:
+        return False
+    if sid in _protected_strategy_ids():
+        return True
+    meta = _find_strategy_meta(sid)
+    if not isinstance(meta, dict):
+        return False
+    if bool(meta.get("immutable", False)):
+        return True
+    level = str(meta.get("protect_level", "")).strip().lower()
+    return level in {"baseline", "protected", "builtin"}
 
 
 def _build_ai_analysis(strategy_intent, strategy_id, strategy_name, code_template=None):
@@ -926,6 +984,8 @@ async def api_strategy_manager_detail(strategy_id: str):
 @app.post("/api/strategy_manager/toggle")
 async def api_strategy_manager_toggle(req: StrategyToggleRequest):
     try:
+        if _is_protected_strategy(req.strategy_id) and (not req.enabled):
+            return {"status": "error", "msg": f"strategy {req.strategy_id} is protected and cannot be disabled"}
         set_strategy_enabled(req.strategy_id, req.enabled)
         return {"status": "success"}
     except Exception as e:
@@ -984,6 +1044,15 @@ async def api_strategy_manager_analyze_market(req: StrategyMarketAnalyzeRequest)
 @app.post("/api/strategy_manager/add")
 async def api_strategy_manager_add(req: StrategyAddRequest):
     try:
+        sid = str(req.strategy_id or "").strip()
+        if not sid:
+            return {"status": "error", "msg": "strategy_id is required"}
+        if _find_strategy_meta(sid) is not None:
+            return {"status": "error", "msg": f"strategy id already exists: {sid}"}
+        depends_on = _normalize_depends_on(req.depends_on)
+        missing = [x for x in depends_on if _find_strategy_meta(x) is None]
+        if missing:
+            return {"status": "error", "msg": f"depends_on not found: {','.join(missing)}"}
         kline_type = _normalize_kline_type(req.kline_type)
         code_text = _apply_kline_type_to_code(req.code, kline_type)
         class_name = _extract_first_class_name(code_text) or (req.class_name or "")
@@ -1000,6 +1069,9 @@ async def api_strategy_manager_add(req: StrategyAddRequest):
             "strategy_intent": strategy_intent,
             "source": req.source or "",
             "kline_type": kline_type,
+            "depends_on": depends_on,
+            "protect_level": req.protect_level or "custom",
+            "immutable": bool(req.immutable) if req.immutable is not None else False,
             "raw_requirement_title": req.raw_requirement_title or "",
             "raw_requirement": req.raw_requirement or ""
         })
@@ -1012,7 +1084,16 @@ async def api_strategy_manager_add(req: StrategyAddRequest):
 @app.post("/api/strategy_manager/update")
 async def api_strategy_manager_update(req: StrategyUpdateRequest):
     try:
-        payload = {"id": req.strategy_id}
+        sid = str(req.strategy_id or "").strip()
+        if not sid:
+            return {"status": "error", "msg": "strategy_id is required"}
+        if is_builtin_strategy_id(sid):
+            return {"status": "error", "msg": f"builtin strategy {sid} is not editable"}
+        if _is_protected_strategy(sid):
+            return {"status": "error", "msg": f"strategy {sid} is protected and cannot be updated"}
+        if _find_strategy_meta(sid) is None:
+            return {"status": "error", "msg": f"strategy not found: {sid}"}
+        payload = {"id": sid}
         if req.strategy_name is not None:
             payload["name"] = req.strategy_name
         if req.class_name is not None:
@@ -1034,6 +1115,18 @@ async def api_strategy_manager_update(req: StrategyUpdateRequest):
             payload["raw_requirement_title"] = req.raw_requirement_title
         if req.raw_requirement is not None:
             payload["raw_requirement"] = req.raw_requirement
+        if req.depends_on is not None:
+            depends_on = _normalize_depends_on(req.depends_on)
+            if sid in depends_on:
+                return {"status": "error", "msg": "strategy cannot depend on itself"}
+            missing = [x for x in depends_on if _find_strategy_meta(x) is None]
+            if missing:
+                return {"status": "error", "msg": f"depends_on not found: {','.join(missing)}"}
+            payload["depends_on"] = depends_on
+        if req.protect_level is not None:
+            payload["protect_level"] = req.protect_level
+        if req.immutable is not None:
+            payload["immutable"] = bool(req.immutable)
         update_custom_strategy(payload)
         return {"status": "success"}
     except Exception as e:
@@ -1044,7 +1137,19 @@ async def api_strategy_manager_update(req: StrategyUpdateRequest):
 @app.post("/api/strategy_manager/delete")
 async def api_strategy_manager_delete(req: StrategyDeleteRequest):
     try:
-        deleted = delete_strategy(req.strategy_id)
+        sid = str(req.strategy_id or "").strip()
+        if not sid:
+            return {"status": "error", "msg": "strategy_id is required"}
+        if _is_protected_strategy(sid) and (not req.force):
+            return {"status": "error", "msg": f"strategy {sid} is protected and cannot be deleted"}
+        meta = _find_strategy_meta(sid)
+        if isinstance(meta, dict):
+            if bool(meta.get("enabled", False)) and (not req.force):
+                return {"status": "error", "msg": f"strategy {sid} is enabled, disable it before delete"}
+        dependents = list_strategy_dependents(sid)
+        if dependents and (not req.force):
+            return {"status": "error", "msg": f"strategy {sid} is referenced by: {','.join(dependents)}"}
+        deleted = delete_strategy(sid)
         return {"status": "success" if deleted else "info", "deleted": bool(deleted)}
     except Exception as e:
         logger.error(f"/api/strategy_manager/delete failed: {e}", exc_info=True)

@@ -108,6 +108,45 @@ def normalize_kline_type(value):
     return txt or "1min"
 
 
+def _normalize_depends_on(value):
+    if not isinstance(value, list):
+        return []
+    out = []
+    seen = set()
+    for item in value:
+        sid = str(item or "").strip()
+        if not sid:
+            continue
+        if sid in seen:
+            continue
+        seen.add(sid)
+        out.append(sid)
+    return out
+
+
+def is_builtin_strategy_id(strategy_id):
+    sid = str(strategy_id or "").strip()
+    if not sid:
+        return False
+    builtin_ids = {str(x.get("id", "")).strip() for x in list_builtin_strategy_meta()}
+    return sid in builtin_ids
+
+
+def list_strategy_dependents(strategy_id):
+    target = str(strategy_id or "").strip()
+    if not target:
+        return []
+    out = []
+    for row in load_custom_strategies():
+        sid = str(row.get("id", "")).strip()
+        if not sid:
+            continue
+        deps = _normalize_depends_on(row.get("depends_on"))
+        if target in deps:
+            out.append(sid)
+    return sorted(out)
+
+
 def load_custom_strategies():
     ensure_strategy_store()
     store_path = _resolve_custom_store_path(for_write=False)
@@ -184,6 +223,9 @@ def list_all_strategy_meta():
             "editable": False,
             "source": "builtin",
             "source_label": "内置策略",
+            "protect_level": "builtin",
+            "immutable": True,
+            "depends_on": [],
             "analysis_text": "",
             "code": "",
             "raw_requirement_title": "原始需求",
@@ -219,6 +261,9 @@ def list_all_strategy_meta():
             "editable": True,
             "source": source,
             "source_label": source_label,
+            "protect_level": str(c.get("protect_level", "custom")).strip() or "custom",
+            "immutable": bool(c.get("immutable", False)),
+            "depends_on": _normalize_depends_on(c.get("depends_on")),
             "analysis_text": str(c.get("analysis_text", "")),
             "code": str(c.get("code", "")),
             "raw_requirement_title": raw_requirement_title,
@@ -355,6 +400,9 @@ def add_custom_strategy(entry):
         "template_text": str(entry.get("template_text", "")),
         "analysis_text": str(entry.get("analysis_text", "")),
         "source": source,
+        "protect_level": str(entry.get("protect_level", "custom") or "custom").strip() or "custom",
+        "immutable": bool(entry.get("immutable", False)),
+        "depends_on": _normalize_depends_on(entry.get("depends_on")),
         "raw_requirement_title": raw_requirement_title,
         "raw_requirement": raw_requirement,
         "strategy_intent": strategy_intent,
@@ -386,8 +434,7 @@ def delete_strategy(strategy_id):
     sid = str(strategy_id or "").strip()
     if not sid:
         return False
-    builtin_ids = {str(x.get("id", "")).strip() for x in list_builtin_strategy_meta()}
-    if sid in builtin_ids:
+    if is_builtin_strategy_id(sid):
         deleted = load_deleted_ids()
         if sid in deleted:
             return False
@@ -455,6 +502,12 @@ def update_custom_strategy(entry):
         source = str(entry.get("source", "")).strip().lower()
         if source in {"human", "market"}:
             row["source"] = source
+    if "protect_level" in entry:
+        row["protect_level"] = str(entry.get("protect_level", "custom") or "custom").strip() or "custom"
+    if "immutable" in entry:
+        row["immutable"] = bool(entry.get("immutable", False))
+    if "depends_on" in entry:
+        row["depends_on"] = _normalize_depends_on(entry.get("depends_on"))
     if "strategy_intent" in entry and isinstance(entry.get("strategy_intent"), dict):
         strategy_intent, intent_explain = normalize_strategy_intent(entry.get("strategy_intent"))
         row["strategy_intent"] = strategy_intent
