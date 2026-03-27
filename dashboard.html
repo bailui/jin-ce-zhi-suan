@@ -3450,8 +3450,14 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             document.getElementById('bt-strategy-reports').innerHTML = '';
             
             const code = normalizeCode(document.getElementById('stock-search-input').value || '600036.SH');
-            const picked = selectedStrategyIds.length ? selectedStrategyIds : strategyCatalog.map(s => String(s.id));
-            const strategy = (!picked.length || picked.length === strategyCatalog.length) ? 'all' : String(picked[0]);
+            const picked = Array.isArray(selectedStrategyIds) ? selectedStrategyIds.slice() : [];
+            if (!picked.length) {
+                logMessage('回测', '未选择策略，已取消回测提交', 'warning');
+                const txt = document.getElementById('backtest-status-text');
+                if (txt) txt.innerText = '未选择策略';
+                return;
+            }
+            const strategy = picked.length === strategyCatalog.length ? 'all' : String(picked[0]);
             const range = document.getElementById('bt-range-select')?.value || '1y';
             const capitalRaw = Number(document.getElementById('bt-capital-input')?.value || 1000000);
             const capital = Number.isFinite(capitalRaw) && capitalRaw >= 10000 ? Math.floor(capitalRaw) : 1000000;

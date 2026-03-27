@@ -5,6 +5,13 @@ import os
 class ConfigLoader:
     _instance = None
     _config = {}
+    _private_override_paths = {
+        "data_provider.tushare_token",
+        "data_provider.default_api_key",
+        "data_provider.llm_api_key",
+        "data_provider.strategy_llm_api_key",
+        "data_provider.api_key",
+    }
 
     def __new__(cls, config_path="config.json"):
         if cls._instance is None:
@@ -19,6 +26,7 @@ class ConfigLoader:
         base_config = self._load_json_config(base_config_path)
         private_config_path = os.environ.get("CONFIG_PRIVATE_PATH", os.path.join(project_root, "config.private.json"))
         private_config = self._load_json_config(private_config_path, silent=True)
+        private_config = self._filter_private_override_config(private_config)
         self._config = self._deep_merge_dict(base_config, private_config)
 
     def _load_json_config(self, config_path, silent=False):
@@ -54,6 +62,48 @@ class ConfigLoader:
             else:
                 merged[k] = v
         return merged
+
+    def _path_exists(self, payload, path):
+        if not isinstance(payload, dict):
+            return False
+        cur = payload
+        for key in str(path).split('.'):
+            if not isinstance(cur, dict) or key not in cur:
+                return False
+            cur = cur.get(key)
+        return True
+
+    def _get_path_value(self, payload, path, default=None):
+        if not isinstance(payload, dict):
+            return default
+        cur = payload
+        for key in str(path).split('.'):
+            if not isinstance(cur, dict) or key not in cur:
+                return default
+            cur = cur.get(key)
+        return cur
+
+    def _set_path_value(self, payload, path, value):
+        if not isinstance(payload, dict):
+            return
+        keys = str(path).split('.')
+        cur = payload
+        for key in keys[:-1]:
+            nxt = cur.get(key)
+            if not isinstance(nxt, dict):
+                nxt = {}
+                cur[key] = nxt
+            cur = nxt
+        cur[keys[-1]] = value
+
+    def _filter_private_override_config(self, payload):
+        if not isinstance(payload, dict):
+            return {}
+        filtered = {}
+        for path in self._private_override_paths:
+            if self._path_exists(payload, path):
+                self._set_path_value(filtered, path, self._get_path_value(payload, path, ""))
+        return filtered
 
     def get(self, key, default=None):
         keys = key.split('.')

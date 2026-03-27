@@ -10,14 +10,15 @@
     "enable_fallback": false,
     "tushare_token": "",
     "default_api_key": "",
-    "default_api_url": "",
+    "default_api_url": "https://gamecube-uri-arranged-nutrition.trycloudflare.com",
     "llm_api_url": "https://api.openai.com/v1",
     "llm_api_key": "",
     "llm_model": "gpt-4o-mini",
     "strategy_llm_api_url": "https://api.siliconflow.cn/v1",
     "strategy_llm_api_key": "",
     "strategy_llm_model": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "strategy_llm_timeout_sec": 240
+    "strategy_llm_timeout_sec": 240,
+    "api_key": ""
   },
   "targets": [
     "301227.SZ"
