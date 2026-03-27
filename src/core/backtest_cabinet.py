@@ -69,6 +69,7 @@ class BacktestCabinet:
         self.drawdown_above_limit = False
         self._event_queue = None
         self._event_task = None
+        self._last_yield_ts = perf_counter()
         
         for s in self.strategies:
             self.personnel.register_strategy(s)
@@ -315,6 +316,13 @@ class BacktestCabinet:
             self._event_queue.put_nowait((event_type, data))
         except asyncio.QueueFull:
             await self._event_queue.put((event_type, data))
+        await self._yield_control(0.01)
+
+    async def _yield_control(self, min_interval_sec=0.02):
+        now = perf_counter()
+        if (now - self._last_yield_ts) >= float(min_interval_sec):
+            await asyncio.sleep(0)
+            self._last_yield_ts = perf_counter()
 
     async def _emit_account_snapshot(self, kline, active_strategy_id=None, compliance_status="PASS"):
         current_prices = {kline['code']: kline['close']}
@@ -390,7 +398,7 @@ class BacktestCabinet:
                 'current_date': f'{start_date.date()} ~ {end_date.date()}'
             })
             await self._emit('backtest_flow', {'module': '工部', 'level': 'system', 'msg': f'数据获取阶段：连通性检查 {provider_source}'})
-            ok, reason = self._check_provider_connectivity(provider, provider_source)
+            ok, reason = await asyncio.to_thread(self._check_provider_connectivity, provider, provider_source)
             if not ok and enable_fallback:
                 await self._emit('backtest_flow', {'module': '工部', 'level': 'warning', 'msg': f'主数据源连通性检查失败，开始回退。原因: {reason}'})
                 fallback_sources = []
@@ -401,7 +409,7 @@ class BacktestCabinet:
                     fallback_sources.append('akshare')
                 for src in fallback_sources:
                     candidate = self._build_provider(src)
-                    candidate_ok, candidate_reason = self._check_provider_connectivity(candidate, src)
+                    candidate_ok, candidate_reason = await asyncio.to_thread(self._check_provider_connectivity, candidate, src)
                     if candidate_ok:
                         provider = candidate
                         provider_source = src
@@ -430,8 +438,8 @@ class BacktestCabinet:
                     'current_date': f'{start_date.date()} ~ {end_date.date()}'
                 })
                 await self._emit('backtest_flow', {'module': '工部', 'level': 'system', 'msg': f'数据获取阶段：拉取历史K线 {start_date.date()}~{end_date.date()}'})
-                await asyncio.sleep(0)
-                df = provider.fetch_minute_data(self.stock_code, start_date, end_date)
+                await self._yield_control(0.01)
+                df = await asyncio.to_thread(provider.fetch_minute_data, self.stock_code, start_date, end_date)
                 if df.empty and enable_fallback:
                     token = self.config.get("data_provider.tushare_token")
                     if token and provider_source != 'tushare':
@@ -443,9 +451,9 @@ class BacktestCabinet:
                             'current_date': f'{start_date.date()} ~ {end_date.date()}'
                         })
                         await self._emit('backtest_flow', {'module': '工部', 'level': 'warning', 'msg': '数据获取阶段：主源无数据，切换 Tushare'})
-                        await asyncio.sleep(0)
+                        await self._yield_control(0.01)
                         try:
-                            df = TushareProvider(token=token).fetch_minute_data(self.stock_code, start_date, end_date)
+                            df = await asyncio.to_thread(TushareProvider(token=token).fetch_minute_data, self.stock_code, start_date, end_date)
                         except Exception:
                             df = pd.DataFrame()
                 if df.empty and enable_fallback and provider_source != 'akshare':
@@ -457,9 +465,9 @@ class BacktestCabinet:
                         'current_date': f'{start_date.date()} ~ {end_date.date()}'
                     })
                     await self._emit('backtest_flow', {'module': '工部', 'level': 'warning', 'msg': '数据获取阶段：Tushare 无数据，切换 Akshare'})
-                    await asyncio.sleep(0)
+                    await self._yield_control(0.01)
                     try:
-                        df = AkshareProvider().fetch_minute_data(self.stock_code, start_date, end_date)
+                        df = await asyncio.to_thread(AkshareProvider().fetch_minute_data, self.stock_code, start_date, end_date)
                     except Exception:
                         df = pd.DataFrame()
                 if df.empty:
@@ -475,7 +483,7 @@ class BacktestCabinet:
                         'provider_source': provider_source
                     })
                     return
-                df = self.works.clean_data(df)
+                df = await asyncio.to_thread(self.works.clean_data, df)
                 await self._emit('backtest_progress', {
                     'progress': 15,
                     'phase': 'data_fetch',
@@ -518,12 +526,12 @@ class BacktestCabinet:
                 if tf_df.empty:
                     try:
                         if hasattr(provider, "fetch_kline_data"):
-                            tf_df = provider.fetch_kline_data(self.stock_code, start_date, end_date, interval=tf)
+                            tf_df = await asyncio.to_thread(provider.fetch_kline_data, self.stock_code, start_date, end_date, tf)
                     except Exception:
                         tf_df = pd.DataFrame()
                     if tf_df.empty:
                         try:
-                            tf_df = Indicators.resample(df, tf)
+                            tf_df = await asyncio.to_thread(Indicators.resample, df, tf)
                         except Exception:
                             tf_df = pd.DataFrame()
                     if not tf_df.empty:
@@ -557,8 +565,7 @@ class BacktestCabinet:
             col_idx = {c: i for i, c in enumerate(df.columns)}
             stage_started_at = perf_counter()
             for i, row in enumerate(df.itertuples(index=False, name=None)):
-                if i % 10 == 0:
-                    await asyncio.sleep(0)
+                await self._yield_control(0.01)
                 kline = {
                     "code": row[col_idx.get("code")],
                     "dt": row[col_idx.get("dt")],
@@ -674,8 +681,7 @@ class BacktestCabinet:
                     })
                 for signal in signals:
                     op_counter += 1
-                    if op_counter % 20 == 0:
-                        await asyncio.sleep(0)
+                    await self._yield_control(0.01)
                     sid = signal['strategy_id']
                     await self._emit('zhongshu', {
                         'msg': f"策略 {sid} 生成信号",
@@ -730,8 +736,7 @@ class BacktestCabinet:
                 triggered_orders = self.state_affairs.check_stops(kline)
                 for order in triggered_orders:
                     op_counter += 1
-                    if op_counter % 20 == 0:
-                        await asyncio.sleep(0)
+                    await self._yield_control(0.01)
                     account = self.strategy_revenues.get(order['strategy_id'])
                     if account is None:
                         continue
