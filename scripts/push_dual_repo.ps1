@@ -7,6 +7,8 @@ param(
     [string]$PrivateRepoUrl = "https://gitee.com/SeniorAgentTeam/jin-ce-zhi-suan.git",
     [string]$PublicCommitMessage = "feat: update public code",
     [string]$PrivateCommitMessage = "chore: update private config",
+    [switch]$UseLocalCommits,
+    [switch]$SkipPublicPush,
     [switch]$DryRun
 )
 
@@ -71,6 +73,27 @@ function Ensure-LocalBranch {
     }
 }
 
+function Get-RemotePushUrl {
+    param([string]$Name)
+    $result = Invoke-Git -Args @("remote", "get-url", "--push", $Name) -AllowFailure -ReadOnly
+    if ($result.ExitCode -ne 0) {
+        return ""
+    }
+    return "$($result.Output[0])".Trim()
+}
+
+function Should-SkipPublicPush {
+    param([string]$RemoteName)
+    if ($SkipPublicPush) {
+        return $true
+    }
+    $pushUrl = Get-RemotePushUrl -Name $RemoteName
+    if ([string]::IsNullOrWhiteSpace($pushUrl)) {
+        return $false
+    }
+    return $pushUrl -match "^(DISABLED|NO_PUSH|BLOCKED|disabled|no_push|blocked)"
+}
+
 function Has-WorkingChanges {
     $status = Invoke-Git -Args @("status", "--porcelain") -ReadOnly
     return ($status.Output | Measure-Object).Count -gt 0
@@ -93,7 +116,11 @@ try {
     } else {
         Write-Host "公共分支无可提交改动，跳过 commit。"
     }
-    Invoke-Git -Args @("push", $PublicRemote, $PublicBranch) | Out-Null
+    if (Should-SkipPublicPush -RemoteName $PublicRemote) {
+        Write-Host "检测到公共仓库 push 已禁用，跳过 public push。"
+    } else {
+        Invoke-Git -Args @("push", $PublicRemote, $PublicBranch) | Out-Null
+    }
 
     Invoke-Git -Args @("checkout", $PrivateBranch) | Out-Null
     Invoke-Git -Args @("merge", $PublicBranch, "--no-edit") | Out-Null
