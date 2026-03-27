@@ -9,6 +9,7 @@ param(
     [string]$PrivateCommitMessage = "chore: update private config",
     [switch]$UseLocalCommits,
     [switch]$SkipPublicPush,
+    [switch]$StrictPublicPush,
     [switch]$DryRun
 )
 
@@ -113,6 +114,7 @@ $startBranch = (Invoke-Git -Args @("rev-parse", "--abbrev-ref", "HEAD") -ReadOnl
 $privateStashCreated = $false
 $entryStashCreated = $false
 $entryStashTag = "dual-repo-entry-temp-" + [DateTime]::Now.ToString("yyyyMMddHHmmssfff")
+$publicPushFailed = $false
 
 try {
     $publicDenyList = @(
@@ -147,7 +149,15 @@ try {
     if ($SkipPublicPush) {
         Write-Host "已指定 SkipPublicPush，跳过 public push。"
     } else {
-        Invoke-Git -Args @("push", $PublicRemote, $PublicBranch) | Out-Null
+        $publicPushResult = Invoke-Git -Args @("push", $PublicRemote, $PublicBranch) -AllowFailure
+        if ($publicPushResult.ExitCode -ne 0) {
+            $publicPushFailed = $true
+            if ($StrictPublicPush) {
+                throw "public push 失败，已按 StrictPublicPush 中止：`n$($publicPushResult.Output -join "`n")"
+            }
+            Write-Host "警告：public push 失败，继续执行 private push。"
+            Write-Host ($publicPushResult.Output -join "`n")
+        }
     }
 
     $stashBeforeCount = @((Invoke-Git -Args @("stash", "list") -ReadOnly).Output).Count
@@ -173,7 +183,11 @@ try {
         Write-Host "私有分支无可提交改动，跳过 commit。"
     }
     Invoke-Git -Args @("push", $PrivateRemote, $PrivateBranch) | Out-Null
-    Write-Host "双仓库推送完成。"
+    if ($publicPushFailed) {
+        Write-Host "private push 已完成，但 public push 失败（见上方警告）。"
+    } else {
+        Write-Host "双仓库推送完成。"
+    }
 }
 finally {
     if (-not $DryRun) {
