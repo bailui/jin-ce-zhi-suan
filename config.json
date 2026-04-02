@@ -16,11 +16,13 @@
       "data_provider.api_key",
       "data_provider.mysql_password",
       "data_provider.postgres_password",
-      "data_provider.default_api_url"
+      "data_provider.default_api_url",
+      "webhook_notification.feishu_webhook_url",
+      "webhook_notification.feishu_secret"
     ]
   },
   "data_provider": {
-    "source": "mysql",
+    "source": "default",
     "enable_fallback": false,
     "tushare_token": "",
     "default_api_key": "",
@@ -57,7 +59,7 @@
     "postgres_table_30min": "dat_30mins",
     "postgres_table_60min": "dat_60mins",
     "postgres_table_day": "dat_day",
-    "backtest_cache_db_source": "mysql",
+    "backtest_cache_db_source": "",
     "llm_api_url": "https://api.openai.com/v1",
     "llm_api_key": "",
     "llm_model": "gpt-4o-mini",
@@ -90,11 +92,12 @@
     ],
     "dry_run": false,
     "on_duplicate": "ignore",
-    "write_mode": "direct_db",
+    "write_mode": "api",
     "direct_db_source": "mysql"
   },
   "targets": [
-    "301227.SZ"
+    "301227.SZ",
+    "603083.SH"
   ],
   "strategies": {
     "active_ids": [
@@ -299,6 +302,29 @@
       "daily_t1_deviation_report": true,
       "weekly_attribution_report": true
     }
+  },
+  "webhook_notification": {
+    "enabled": true,
+    "event_types": [
+      "trade_exec",
+      "live_alert",
+      "zhongshu",
+      "menxia",
+      "daily_summary",
+      "system"
+    ],
+    "webhook_urls": [],
+    "feishu_webhook_url": "",
+    "feishu_secret": "",
+    "dedupe_window_seconds": 12,
+    "timeout_sec": 5,
+    "max_retries": 2,
+    "retry_backoff_seconds": 1.2,
+    "persist_failed_events": true,
+    "failed_events_file": "data/webhook_failed_events.jsonl",
+    "failed_retry_interval_seconds": 30,
+    "failed_retry_batch_size": 20,
+    "failed_max_retry": 20
   },
   "strategy_params": {
     "common": {

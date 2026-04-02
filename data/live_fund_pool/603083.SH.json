@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "state": {
+    "stock_code": "603083.SH",
+    "updated_at": "2026-04-02T10:29:00",
+    "initial_capital": 1000000.0,
+    "cash": 1000000.0,
+    "holdings_value": 0.0,
+    "fund_value": 1000000.0,
+    "position_count": 0,
+    "positions": [],
+    "trade_count": 0,
+    "trade_details": [],
+    "realized_pnl": 0.0,
+    "fee_summary": {
+      "total_cost": 0.0,
+      "total_commission": 0.0,
+      "total_stamp_duty": 0.0,
+      "total_transfer_fee": 0.0
+    },
+    "peak_fund_value": 1000000.0
+  },
+  "positions_state": {},
+  "transactions_all": []
+}

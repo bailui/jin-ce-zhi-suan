@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import os
 from src.utils.config_loader import ConfigLoader
+from src.utils.indicators import Indicators
 
 class TushareProvider:
     """
@@ -245,6 +246,48 @@ class TushareProvider:
         except Exception as e:
             print(f"Error fetching Tushare history: {e}")
             return cached_df if not cached_df.empty else pd.DataFrame()
+
+    def _fetch_stk_mins(self, code, start_time, end_time, freq="1min"):
+        if not self.pro:
+            return pd.DataFrame()
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            df = self.pro.stk_mins(
+                ts_code=code,
+                freq=str(freq),
+                start_date=start_str,
+                end_date=end_str
+            )
+            return self._normalize_minutes_df(df)
+        except Exception:
+            return pd.DataFrame()
+
+    def fetch_kline_data(self, code, start_time, end_time, interval="1min"):
+        tf = str(interval or "1min")
+        if tf == "1min":
+            return self.fetch_minute_data(code, start_time, end_time)
+        if tf == "D":
+            df_d = self.fetch_daily_data(code, start_time, end_time)
+            if not df_d.empty:
+                return df_d
+            df_1m = self.fetch_minute_data(code, start_time, end_time)
+            return Indicators.resample(df_1m, "D") if not df_1m.empty else pd.DataFrame()
+        freq_map = {
+            "5min": "5min",
+            "10min": "10min",
+            "15min": "15min",
+            "30min": "30min",
+            "60min": "60min"
+        }
+        if tf in freq_map:
+            df_tf = self._fetch_stk_mins(code, start_time, end_time, freq=freq_map[tf])
+            if not df_tf.empty:
+                return df_tf
+        df_1m = self.fetch_minute_data(code, start_time, end_time)
+        if df_1m.empty:
+            return pd.DataFrame()
+        return Indicators.resample(df_1m, tf)
 
     def fetch_daily_data(self, code, start_time, end_time):
         if not self.pro:

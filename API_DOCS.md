@@ -65,7 +65,7 @@ curl -X POST http://localhost:8000/api/control/reload_strategies
 
 ## 3. 启动实盘/模拟盘 (Start Live Simulation)
 
-启动对指定股票的实时行情监控和策略信号扫描。
+启动对一个或多个股票的实时行情监控和策略信号扫描。
 
 - **接口地址:** `/api/control/start_live`
 - **请求方法:** `POST`
@@ -75,12 +75,22 @@ curl -X POST http://localhost:8000/api/control/reload_strategies
 
 | 参数名 | 类型 | 必填 | 说明 | 示例值 |
 | :--- | :--- | :--- | :--- | :--- |
-| `stock_code` | string | 是 | 股票代码 | `"000001.SZ"` |
+| `stock_code` | string | 否 | 单个股票代码 | `"000001.SZ"` |
+| `stock_codes` | string[] | 否 | 多个股票代码 | `["000001.SZ","600036.SH"]` |
+| `strategy_id` | string | 否 | 对本次启动股票统一指定单策略 | `"08"` |
+| `strategy_ids` | string[] | 否 | 对本次启动股票统一指定多策略 | `["08","34R1"]` |
+| `stock_strategy_map` | object | 否 | 每个股票独立策略画像，key=股票代码，value=策略ID数组 | `{"000001.SZ":["08"],"600036.SH":["34R1"]}` |
+| `replace_existing` | boolean | 否 | 是否替换当前已运行实盘任务（默认 true） | `true` |
 
 **请求示例:**
 ```json
 {
-    "stock_code": "000001.SZ"
+    "stock_codes": ["000001.SZ", "600036.SH"],
+    "stock_strategy_map": {
+        "000001.SZ": ["08"],
+        "600036.SH": ["34R1", "34R1U"]
+    },
+    "replace_existing": true
 }
 ```
 
@@ -88,7 +98,13 @@ curl -X POST http://localhost:8000/api/control/reload_strategies
 ```json
 {
     "status": "success",
-    "msg": "Live monitoring started for 000001.SZ"
+    "msg": "Live monitoring started for 000001.SZ,600036.SH",
+    "started_codes": ["000001.SZ", "600036.SH"],
+    "running_codes": ["000001.SZ", "600036.SH"],
+    "strategy_profiles": {
+        "000001.SZ": ["08"],
+        "600036.SH": ["34R1", "34R1U"]
+    }
 }
 ```
 
@@ -128,12 +144,18 @@ curl -X POST http://localhost:8000/api/control/stop
 
 | 参数名 | 类型 | 必填 | 说明 | 示例值 |
 | :--- | :--- | :--- | :--- | :--- |
-| `strategy_id` | string | 是 | 策略ID | `"08"` |
+| `strategy_id` | string | 否 | 单个策略ID | `"08"` |
+| `strategy_ids` | string[] | 否 | 多策略ID | `["08","34R1"]` |
+| `stock_codes` | string[] | 否 | 仅对指定股票切换策略，不传则作用于全部运行中的实盘任务 | `["000001.SZ"]` |
+| `stock_strategy_map` | object | 否 | 按股票独立切换策略，优先于统一策略参数 | `{"000001.SZ":["08"],"600036.SH":["34R1"]}` |
 
 **请求示例:**
 ```json
 {
-    "strategy_id": "08"
+    "stock_strategy_map": {
+        "000001.SZ": ["08"],
+        "600036.SH": ["34R1", "34R1U"]
+    }
 }
 ```
 
@@ -150,6 +172,14 @@ curl -X POST http://localhost:8000/api/control/stop
 ```json
 {
     "is_running": true,
+    "backtest_running": false,
+    "live_running": true,
+    "live_running_codes": ["000001.SZ", "600036.SH"],
+    "live_task_count": 2,
+    "live_strategy_profiles": {
+        "000001.SZ": ["08"],
+        "600036.SH": ["34R1", "34R1U"]
+    },
     "active_cabinet_type": "LiveCabinet"
 }
 ```
@@ -161,7 +191,84 @@ curl -X POST http://localhost:8000/api/control/stop
 如果调用方需要实时接收策略信号和日志，可以连接 WebSocket。
 
 - **地址:** `ws://localhost:8000/ws`
+- **启动实盘命令:** `{"type":"start_simulation","stocks":["000001.SZ","600036.SH"],"stock_strategy_map":{"000001.SZ":["08"],"600036.SH":["34R1"]},"replace_existing":true}`
+- **停止实盘命令:** `{"type":"stop_simulation","stocks":["000001.SZ"]}` 或 `{"type":"stop_simulation"}`
+- **切策略命令:** `{"type":"switch_strategy","stock_strategy_map":{"000001.SZ":["08"],"600036.SH":["34R1U"]}}`
 - **消息类型:**
     - `log`: 系统日志
     - `kline`: 最新 K 线数据
     - `decision`: 最终交易决策 (圣旨)
+    - 绝大多数实盘事件会携带 `stock_code` 字段用于多标的区分
+
+---
+
+## 7. Webhook 推送配置（飞书/通用）
+
+在 `config.json` 中通过 `webhook_notification` 配置通知：
+
+- `enabled`: 是否启用
+- `event_types`: 需要推送的事件类型白名单
+- `webhook_urls`: 通用 webhook 列表（POST JSON）
+- `feishu_webhook_url`: 飞书机器人 webhook
+- `feishu_secret`: 飞书签名密钥（可选）
+- `max_retries` / `retry_backoff_seconds`: 首次发送重试策略
+- `persist_failed_events`: 发送失败是否落盘
+- `failed_events_file`: 失败事件队列文件（JSONL）
+- `failed_retry_interval_seconds`: 失败队列重试间隔
+- `failed_retry_batch_size`: 每轮补偿重试最大条数
+- `failed_max_retry`: 失败队列单条最大重试次数
+
+---
+
+## 8. Webhook失败队列管理（前台重推）
+
+用于页面手工补偿推送失败记录。
+
+### 8.1 查询失败队列
+
+- **接口地址:** `/api/webhook/failed?limit=200`
+- **请求方法:** `GET`
+
+**响应示例:**
+```json
+{
+  "status": "success",
+  "count": 2,
+  "events": [
+    {
+      "event_id": "8f329ae71c5b7e11",
+      "channel_type": "feishu",
+      "event_type": "trade_exec",
+      "stock_code": "600036.SH",
+      "created_at": "2026-04-01T15:22:11",
+      "retries": 1,
+      "last_error": "http_error:429"
+    }
+  ]
+}
+```
+
+### 8.2 手工重推失败队列
+
+- **接口地址:** `/api/webhook/failed/retry`
+- **请求方法:** `POST`
+- **Content-Type:** `application/json`
+
+**请求参数 (JSON):**
+
+| 参数名 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `event_ids` | string[] | 否 | 指定要重推的记录ID；不传时按队列顺序处理 |
+| `limit` | int | 否 | 最多重推条数，默认20 |
+
+### 8.3 清理失败队列
+
+- **接口地址:** `/api/webhook/failed/delete`
+- **请求方法:** `POST`
+- **Content-Type:** `application/json`
+
+**请求参数 (JSON):**
+
+| 参数名 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `event_ids` | string[] | 否 | 仅清理指定ID；不传则清空失败队列 |

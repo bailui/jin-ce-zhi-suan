@@ -169,7 +169,18 @@ class ShangshuSheng:
             })
             self._rebuild_position_from_lots(pos, fill_price)
             
-            hu_bu.record_transaction(strategy_id, kline['dt'], 'BUY', fill_price, qty, cost)
+            hu_bu.record_transaction(
+                strategy_id,
+                kline['dt'],
+                'BUY',
+                fill_price,
+                qty,
+                cost,
+                0.0,
+                commission=comm,
+                stamp_duty=stamp,
+                transfer_fee=transfer
+            )
 
         elif direction == 'SELL':
             if strategy_id not in self.positions or code not in self.positions[strategy_id]:
@@ -201,7 +212,18 @@ class ShangshuSheng:
             if int(pos.get('qty', 0) or 0) == 0:
                 del self.positions[strategy_id][code]
 
-            hu_bu.record_transaction(strategy_id, kline['dt'], 'SELL', fill_price, qty, cost, pnl)
+            hu_bu.record_transaction(
+                strategy_id,
+                kline['dt'],
+                'SELL',
+                fill_price,
+                qty,
+                cost,
+                pnl,
+                commission=comm,
+                stamp_duty=stamp,
+                transfer_fee=transfer
+            )
             
         return True
 

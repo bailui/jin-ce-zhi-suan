@@ -50,10 +50,13 @@ def create_strategies(apply_active_filter=True):
     if disabled_ids:
         strategies = [s for s in strategies if str(s.id) not in disabled_ids]
     if apply_active_filter:
+        strategies_before_filter = list(strategies)
         cfg = ConfigLoader.reload()
         active_ids = cfg.get("strategies.active_ids", [])
         if isinstance(active_ids, list):
             active = {str(x).strip() for x in active_ids if str(x).strip()}
             if active:
                 strategies = [s for s in strategies if str(s.id).strip() in active]
+                if not strategies:
+                    strategies = strategies_before_filter
     return strategies

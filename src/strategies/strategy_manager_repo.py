@@ -1,4 +1,5 @@
 import json
+import inspect
 import os
 import re
 from datetime import datetime
@@ -11,6 +12,20 @@ import pandas as pd
 import numpy as np
 from src.utils.runtime_params import get_value
 from src.strategy_intent.intent_engine import StrategyIntentEngine
+
+_BUILTIN_STRATEGY_CLASSES = {
+    "00": Strategy00,
+    "01": Strategy01,
+    "02": Strategy02,
+    "03": Strategy03,
+    "04": Strategy04,
+    "05": Strategy05,
+    "06": Strategy06,
+    "07": Strategy07,
+    "08": Strategy08,
+    "09": Strategy09,
+}
+_BUILTIN_META_CACHE = None
 
 
 def _project_root():
@@ -94,17 +109,76 @@ def _save_state_payload(payload):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+def _build_builtin_strategy_code(strategy_id):
+    sid = str(strategy_id or "").strip()
+    cls = _BUILTIN_STRATEGY_CLASSES.get(sid)
+    if cls is None:
+        return ""
+    try:
+        class_src = inspect.getsource(cls).strip()
+    except Exception:
+        return ""
+    header = (
+        "from src.strategies.implemented_strategies import BaseImplementedStrategy\n"
+        "import pandas as pd\n"
+        "import numpy as np\n"
+        "from src.utils.indicators import Indicators\n"
+        "from src.utils.runtime_params import get_value\n\n"
+    )
+    return f"{header}{class_src}\n"
+
+
+def _build_builtin_strategy_analysis(meta, code_text):
+    name = str((meta or {}).get("name", "")).strip() or str((meta or {}).get("id", "")).strip()
+    kline_type = str((meta or {}).get("kline_type", "1min")).strip() or "1min"
+    code = str(code_text or "").upper()
+    features = []
+    if "MACD" in code:
+        features.append("MACD动量确认")
+    if "EMA" in code:
+        features.append("EMA趋势过滤")
+    if "MA(" in code or "INDICATORS.MA" in code:
+        features.append("均线结构判断")
+    if "RSI" in code:
+        features.append("RSI超买超卖")
+    if "BOLL" in code:
+        features.append("布林带波动约束")
+    if "STOP_LOSS" in code or "TRAILING_STOP" in code:
+        features.append("止损风控")
+    if "TAKE_PROFIT" in code or "TP1" in code:
+        features.append("止盈管理")
+    if "CHECK_MAX_HOLDING_TIME" in code:
+        features.append("持仓时长约束")
+    if not features:
+        features.append("规则驱动交易")
+    return f"内置策略「{name}」，触发周期={kline_type}，核心特征：{'、'.join(features)}。详情以下方代码实现为准。"
+
+
 def list_builtin_strategy_meta():
+    global _BUILTIN_META_CACHE
+    if isinstance(_BUILTIN_META_CACHE, list) and _BUILTIN_META_CACHE:
+        return [dict(x) for x in _BUILTIN_META_CACHE]
     items = [
         Strategy00(), Strategy01(), Strategy02(), Strategy03(), Strategy04(),
         Strategy05(), Strategy06(), Strategy07(), Strategy08(), Strategy09()
     ]
-    return [{
-        "id": str(s.id),
-        "name": str(s.name),
-        "builtin": True,
-        "kline_type": str(getattr(s, "trigger_timeframe", "1min") or "1min")
-    } for s in items]
+    out = []
+    for s in items:
+        sid = str(s.id)
+        item = {
+            "id": sid,
+            "name": str(s.name),
+            "builtin": True,
+            "kline_type": str(getattr(s, "trigger_timeframe", "1min") or "1min")
+        }
+        code_text = _build_builtin_strategy_code(sid)
+        item["code"] = code_text
+        item["analysis_text"] = _build_builtin_strategy_analysis(item, code_text)
+        item["raw_requirement_title"] = "内置策略说明"
+        item["raw_requirement"] = f"内置策略 {item['name']}（ID={sid}）由系统内置维护，可查看代码但不可直接编辑。"
+        out.append(item)
+    _BUILTIN_META_CACHE = [dict(x) for x in out]
+    return out
 
 
 def infer_kline_type_from_code(code_text):
@@ -136,6 +210,150 @@ def _normalize_depends_on(value):
     return out
 
 
+def _is_garbled_text(value):
+    txt = str(value or "")
+    return ("�" in txt) or ("??" in txt)
+
+
+def _infer_strategy_name(sid, class_name, current_name):
+    curr = str(current_name or "").strip()
+    if curr and (not _is_garbled_text(curr)):
+        return curr
+    sid_txt = str(sid or "").strip()
+    cls = str(class_name or "").strip()
+    if sid_txt == "34":
+        return "OliverKellEMA交易法则"
+    if sid_txt.startswith("34A") and sid_txt != "34A":
+        return f"OliverKellEMA交易法则-改进{sid_txt}"
+    if sid_txt == "34A":
+        return "OliverKellEMA交易法则-改进A"
+    if sid_txt == "34R1":
+        return "OliverKellEMA策略路由R1"
+    if sid_txt.startswith("34R1_"):
+        return f"OliverKellEMA多周期路由-{sid_txt}"
+    if sid_txt.startswith("34R1U500"):
+        return f"OliverKellEMA冲顶族-{sid_txt}"
+    if sid_txt.startswith("34R1U"):
+        return f"OliverKellEMA利用率增强-{sid_txt}"
+    if cls.startswith("OliverKellEMA"):
+        return f"OliverKellEMA-{sid_txt}" if sid_txt else "OliverKellEMA策略"
+    return curr or sid_txt
+
+
+def _infer_intent_indicators(code_text, old_indicators):
+    old = old_indicators if isinstance(old_indicators, list) else []
+    if old:
+        return [str(x).strip() for x in old if str(x).strip()]
+    code = str(code_text or "").upper()
+    indicators = []
+    for key in ["EMA", "MA", "MACD", "RSI", "ATR", "BOLL", "VOLUME"]:
+        if key in code:
+            indicators.append(key)
+    return indicators
+
+
+def _normalize_super_init_title(code_text, strategy_name):
+    code = str(code_text or "")
+    if not code.strip():
+        return code
+    pattern = r"(super\(\)\.__init__\(\s*['\"][^'\"]+['\"]\s*,\s*)(['\"])([^'\"]*)(['\"])"
+    m = re.search(pattern, code)
+    if not m:
+        return code
+    old_name = str(m.group(3) or "")
+    if not _is_garbled_text(old_name):
+        return code
+    new_name = str(strategy_name or "").replace("'", " ").replace('"', " ").strip() or old_name
+    return re.sub(pattern, rf"\1\2{new_name}\4", code, count=1)
+
+
+def _repair_garbled_rows(rows):
+    if not isinstance(rows, list):
+        return rows, False
+    changed = False
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        r = dict(row)
+        sid = str(r.get("id", "")).strip()
+        code = str(r.get("code", ""))
+        inferred_name = _infer_strategy_name(sid, r.get("class_name", ""), r.get("name", ""))
+        if inferred_name and str(r.get("name", "")) != inferred_name:
+            r["name"] = inferred_name
+            changed = True
+        repaired_code = _normalize_super_init_title(code, inferred_name)
+        if repaired_code != code:
+            r["code"] = repaired_code
+            code = repaired_code
+            changed = True
+        trigger_tf = str(r.get("kline_type", "")).strip() or infer_kline_type_from_code(code)
+        feature_parts = []
+        if "EMA" in code.upper():
+            feature_parts.append("EMA趋势")
+        if "tp1_done" in code:
+            feature_parts.append("分批止盈")
+        if "pending_sell" in code:
+            feature_parts.append("跌停延迟卖出")
+        if "last_buy_day" in code:
+            feature_parts.append("T+1约束")
+        if not feature_parts:
+            feature_parts.append("趋势跟随")
+        logic_text = f"{sid}：{'+'.join(feature_parts)}，周期={trigger_tf}，包含A股风控约束。"
+        analysis_text = f"{logic_text} 重点执行趋势确认入场、风控优先退出与仓位管理。"
+        raw_text = f"基于代码行为推断：{logic_text} 入场偏向突破/趋势确认，退出包含止损、止盈与时间窗约束。"
+        if _is_garbled_text(r.get("analysis_text", "")):
+            r["analysis_text"] = analysis_text
+            changed = True
+        if _is_garbled_text(r.get("raw_requirement_title", "")):
+            r["raw_requirement_title"] = "策略模板"
+            changed = True
+        if _is_garbled_text(r.get("raw_requirement", "")):
+            r["raw_requirement"] = raw_text
+            changed = True
+        intent = r.get("strategy_intent") if isinstance(r.get("strategy_intent"), dict) else {}
+        if not isinstance(intent, dict):
+            intent = {}
+        if str(intent.get("source", "")).strip().lower() not in {"human", "market"}:
+            intent["source"] = "human"
+            changed = True
+        if not str(intent.get("strategy_type", "")).strip():
+            intent["strategy_type"] = "trend_following"
+            changed = True
+        if _is_garbled_text(intent.get("logic", "")):
+            intent["logic"] = logic_text
+            changed = True
+        indicators = _infer_intent_indicators(code, intent.get("indicators"))
+        if indicators != (intent.get("indicators") if isinstance(intent.get("indicators"), list) else []):
+            intent["indicators"] = indicators
+            changed = True
+        if not str(intent.get("entry", "")).strip():
+            intent["entry"] = "满足趋势与风控条件时开仓"
+            changed = True
+        if not str(intent.get("exit", "")).strip():
+            intent["exit"] = "反向信号或风控触发时平仓"
+            changed = True
+        if not str(intent.get("risk_profile", "")).strip():
+            intent["risk_profile"] = "balanced"
+            changed = True
+        if not isinstance(intent.get("confidence"), (int, float)):
+            intent["confidence"] = 0.72
+            changed = True
+        r["strategy_intent"] = intent
+        explain = str(r.get("intent_explain", "")).strip()
+        if (not explain) or _is_garbled_text(explain):
+            ind_text = "、".join([str(x).strip() for x in intent.get("indicators", []) if str(x).strip()]) or "无"
+            r["intent_explain"] = (
+                f"来源={intent.get('source', 'human')}; 类型={intent.get('strategy_type', 'trend_following')}; "
+                f"逻辑={intent.get('logic', logic_text)}; 指标={ind_text}; 入场={intent.get('entry', '')}; "
+                f"出场={intent.get('exit', '')}; 风格={intent.get('risk_profile', 'balanced')}; "
+                f"置信度={float(intent.get('confidence', 0.72)):.2f}"
+            )
+            changed = True
+        out.append(r)
+    return out, changed
+
+
 def is_builtin_strategy_id(strategy_id):
     sid = str(strategy_id or "").strip()
     if not sid:
@@ -162,13 +380,20 @@ def list_strategy_dependents(strategy_id):
 def load_custom_strategies():
     ensure_strategy_store()
     store_path = _resolve_custom_store_path(for_write=False)
-    try:
-        with open(store_path, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-        rows = payload.get("strategies", [])
-        return [r for r in rows if isinstance(r, dict)]
-    except Exception:
-        return []
+    encodings = ["utf-8-sig", "utf-8", "gbk", "cp936"]
+    for enc in encodings:
+        try:
+            with open(store_path, "r", encoding=enc) as f:
+                payload = json.load(f)
+            rows = payload.get("strategies", []) if isinstance(payload, dict) else []
+            safe_rows = [r for r in rows if isinstance(r, dict)]
+            fixed_rows, changed = _repair_garbled_rows(safe_rows)
+            if changed:
+                save_custom_strategies(fixed_rows)
+            return fixed_rows
+        except Exception:
+            continue
+    return []
 
 
 def save_custom_strategies(rows):
@@ -238,10 +463,10 @@ def list_all_strategy_meta():
             "protect_level": "builtin",
             "immutable": True,
             "depends_on": [],
-            "analysis_text": "",
-            "code": "",
-            "raw_requirement_title": "原始需求",
-            "raw_requirement": ""
+            "analysis_text": str(b.get("analysis_text", "")),
+            "code": str(b.get("code", "")),
+            "raw_requirement_title": str(b.get("raw_requirement_title", "内置策略说明")),
+            "raw_requirement": str(b.get("raw_requirement", ""))
         })
     for c in custom:
         sid = str(c.get("id", "")).strip()

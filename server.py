@@ -5,6 +5,7 @@ import json
 import os
 import importlib
 import sys
+import traceback
 import math
 import numbers
 import re
@@ -22,7 +23,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HT
 from fastapi.responses import HTMLResponse, StreamingResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, List, Any
 from src.core.live_cabinet import LiveCabinet
 from src.core.backtest_cabinet import BacktestCabinet
 from src.utils.config_loader import ConfigLoader
@@ -47,6 +48,7 @@ from src.utils.mysql_provider import MysqlProvider
 from src.utils.postgres_provider import PostgresProvider
 from src.utils.history_sync_service import HistoryDiffSyncService, TABLE_INTERVAL_MAP, DEFAULT_SYNC_TABLES
 from src.utils.backtest_baseline import apply_backtest_baseline
+from src.utils.webhook_notifier import WebhookNotifier
 
 import logging
 
@@ -96,6 +98,10 @@ app.add_middleware(
 active_connections = []
 cabinet_task = None
 current_cabinet = None
+live_tasks: Dict[str, asyncio.Task] = {}
+live_cabinets: Dict[str, LiveCabinet] = {}
+live_strategy_profiles: Dict[str, Any] = {}
+live_last_error: Optional[Dict[str, Any]] = None
 current_provider_source = None
 latest_backtest_result = None
 latest_strategy_reports = {}
@@ -133,8 +139,10 @@ history_sync_service = HistoryDiffSyncService()
 history_sync_scheduler_task = None
 startup_server_host = None
 startup_server_port = None
+webhook_notifier = WebhookNotifier()
 SECRET_CONFIG_PATHS = set(ConfigLoader._default_private_override_paths)
 SECRET_MASK = "********"
+LIVE_FUND_POOL_DIR = os.path.join("data", "live_fund_pool")
 
 def _system_mode(cfg=None):
     c = cfg if cfg is not None else ConfigLoader.reload()
@@ -199,6 +207,223 @@ def _default_target_code(cfg=None):
             if code:
                 return code
     return "600036.SH"
+
+def _normalize_live_codes(stock_code=None, stock_codes=None, cfg=None, use_default=True):
+    out = []
+    seen = set()
+    c = cfg if cfg is not None else ConfigLoader.reload()
+    values = []
+    if isinstance(stock_codes, list):
+        values.extend(stock_codes)
+    if stock_code is not None:
+        values.append(stock_code)
+    if (not values) and use_default:
+        targets = c.get("targets", [])
+        if isinstance(targets, list):
+            values.extend(targets)
+    if (not values) and use_default:
+        values.append(_default_target_code(c))
+    for item in values:
+        code = str(item or "").strip()
+        if not code:
+            continue
+        code_upper = code.upper()
+        if code_upper in seen:
+            continue
+        seen.add(code_upper)
+        out.append(code_upper)
+    if out:
+        return out
+    if use_default:
+        return [_default_target_code(c)]
+    return []
+
+def _live_running_codes():
+    return [code for code, task in live_tasks.items() if task and (not task.done())]
+
+async def _stop_live_tasks(stock_codes=None, clear_profile=False):
+    global current_cabinet
+    targets = _normalize_live_codes(stock_codes=stock_codes, use_default=False) if isinstance(stock_codes, list) else list(live_tasks.keys())
+    stopped = []
+    for code in targets:
+        task = live_tasks.get(code)
+        if task and not task.done():
+            task.cancel()
+            stopped.append(code)
+        live_tasks.pop(code, None)
+        live_cabinets.pop(code, None)
+        if clear_profile:
+            live_strategy_profiles.pop(code, None)
+    if (not live_tasks) and (current_cabinet is not None):
+        current_cabinet = None
+    return stopped
+
+def _normalize_strategy_selection(strategy_id=None, strategy_ids=None):
+    if isinstance(strategy_ids, list):
+        out = []
+        seen = set()
+        for item in strategy_ids:
+            sid = str(item or "").strip()
+            if (not sid) or sid in seen:
+                continue
+            seen.add(sid)
+            out.append(sid)
+        if out:
+            return out
+    sid = str(strategy_id or "").strip()
+    if sid:
+        return sid
+    return None
+
+def _normalize_stock_strategy_map(stock_strategy_map):
+    if not isinstance(stock_strategy_map, dict):
+        return {}
+    out = {}
+    for raw_code, raw_ids in stock_strategy_map.items():
+        code = str(raw_code or "").strip().upper()
+        if not code:
+            continue
+        selection = _normalize_strategy_selection(strategy_ids=raw_ids if isinstance(raw_ids, list) else None)
+        if selection is None:
+            continue
+        out[code] = selection
+    return out
+
+def _profile_snapshot(codes=None):
+    target_codes = codes if isinstance(codes, list) else _live_running_codes()
+    out = {}
+    for code in target_codes:
+        profile = live_strategy_profiles.get(code)
+        if profile is None:
+            cab = live_cabinets.get(code)
+            if cab is not None:
+                profile = getattr(cab, "active_strategy_ids", None)
+        if profile is not None:
+            out[code] = profile
+    return out
+
+def _format_live_start_summary(codes=None):
+    target_codes = codes if isinstance(codes, list) else _live_running_codes()
+    profile_map = _profile_snapshot(target_codes)
+    summary_parts = []
+    for code in target_codes:
+        profile = profile_map.get(code)
+        if isinstance(profile, list):
+            ids_text = "、".join([str(x) for x in profile if str(x)])
+        else:
+            ids_text = str(profile) if profile is not None else "全部"
+        if not ids_text:
+            ids_text = "全部"
+        summary_parts.append(f"{code}[{ids_text}]")
+    return "；".join(summary_parts) if summary_parts else ",".join(target_codes)
+
+def _live_fund_pool_file(stock_code):
+    code = str(stock_code or "").strip().upper()
+    return os.path.join(LIVE_FUND_POOL_DIR, f"{code}.json")
+
+def _empty_live_fund_pool_state(stock_code, initial_capital):
+    cap = float(initial_capital or 0.0)
+    return {
+        "version": 1,
+        "state": {
+            "stock_code": str(stock_code or "").strip().upper(),
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+            "initial_capital": cap,
+            "cash": cap,
+            "holdings_value": 0.0,
+            "fund_value": cap,
+            "position_count": 0,
+            "positions": [],
+            "trade_count": 0,
+            "trade_details": [],
+            "realized_pnl": 0.0,
+            "fee_summary": {
+                "total_cost": 0.0,
+                "total_commission": 0.0,
+                "total_stamp_duty": 0.0,
+                "total_transfer_fee": 0.0
+            },
+            "peak_fund_value": cap
+        },
+        "positions_state": {},
+        "transactions_all": []
+    }
+
+def _load_live_fund_pool_snapshot(stock_code, include_transactions=False, tx_limit=200):
+    code = str(stock_code or "").strip().upper()
+    cab = live_cabinets.get(code)
+    if cab is not None:
+        return cab.get_fund_pool_snapshot(include_transactions=bool(include_transactions), tx_limit=int(tx_limit or 200))
+    file_path = _live_fund_pool_file(code)
+    if not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        state = payload.get("state", {}) if isinstance(payload, dict) else {}
+        if not isinstance(state, dict):
+            return None
+        trades = state.get("trade_details", [])
+        if isinstance(trades, list):
+            if include_transactions:
+                all_trades = payload.get("transactions_all", [])
+                if isinstance(all_trades, list) and all_trades:
+                    state["trade_details"] = all_trades[-max(1, int(tx_limit or 1)):]
+                else:
+                    state["trade_details"] = trades[-max(1, int(tx_limit or 1)):]
+            else:
+                state["trade_details"] = trades[-20:]
+        return state
+    except Exception:
+        return None
+
+def _collect_live_fund_pools(codes=None, include_transactions=False, tx_limit=200):
+    target = []
+    seen = set()
+    if isinstance(codes, list):
+        for item in codes:
+            code = str(item or "").strip().upper()
+            if code and code not in seen:
+                seen.add(code)
+                target.append(code)
+    else:
+        for code in _live_running_codes():
+            code_u = str(code or "").strip().upper()
+            if code_u and code_u not in seen:
+                seen.add(code_u)
+                target.append(code_u)
+        if os.path.isdir(LIVE_FUND_POOL_DIR):
+            for fn in os.listdir(LIVE_FUND_POOL_DIR):
+                if not str(fn).lower().endswith(".json"):
+                    continue
+                code_u = str(fn[:-5] or "").strip().upper()
+                if code_u and code_u not in seen:
+                    seen.add(code_u)
+                    target.append(code_u)
+    out = {}
+    for code in target:
+        snap = _load_live_fund_pool_snapshot(code, include_transactions=include_transactions, tx_limit=tx_limit)
+        if isinstance(snap, dict):
+            out[code] = snap
+    return out
+
+def _set_live_last_error(stock_code, stage, err, tb_text=None):
+    global live_last_error
+    err_type = type(err).__name__ if err is not None else "Exception"
+    err_msg = str(err) if err is not None else ""
+    stack_text = tb_text if isinstance(tb_text, str) and tb_text.strip() else traceback.format_exc()
+    live_last_error = {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "stock_code": str(stock_code or "").upper() or None,
+        "stage": str(stage or "").strip() or None,
+        "error_type": err_type,
+        "error_msg": err_msg,
+        "stack": stack_text
+    }
+
+def _clear_live_last_error():
+    global live_last_error
+    live_last_error = None
 
 def _project_root():
     return os.path.dirname(os.path.abspath(__file__))
@@ -672,14 +897,32 @@ class BacktestRequest(BaseModel):
     capital: Optional[float] = None
 
 class LiveRequest(BaseModel):
-    stock_code: str = "600036.SH"
+    stock_code: Optional[str] = None
+    stock_codes: Optional[list[str]] = None
+    strategy_id: Optional[str] = None
+    strategy_ids: Optional[list[str]] = None
+    stock_strategy_map: Optional[dict[str, list[str]]] = None
+    replace_existing: bool = True
 
 class StrategySwitchRequest(BaseModel):
     strategy_id: Optional[str] = None
     strategy_ids: Optional[list[str]] = None
+    stock_codes: Optional[list[str]] = None
+    stock_strategy_map: Optional[dict[str, list[str]]] = None
 
 class SourceSwitchRequest(BaseModel):
     source: str
+
+class LiveFundPoolResetRequest(BaseModel):
+    stock_code: str
+    initial_capital: Optional[float] = None
+
+class WebhookRetryRequest(BaseModel):
+    event_ids: Optional[list[str]] = None
+    limit: int = 20
+
+class WebhookDeleteRequest(BaseModel):
+    event_ids: Optional[list[str]] = None
 
 class ConfigUpdateRequest(BaseModel):
     config: dict
@@ -1050,7 +1293,7 @@ async def api_strategies():
 
 
 @app.get("/api/strategy_manager/list")
-async def api_strategy_manager_list():
+async def api_strategy_manager_list(page: Optional[int] = None, page_size: Optional[int] = None, all: Optional[bool] = None):
     try:
         rows = list_all_strategy_meta()
         out = []
@@ -1070,7 +1313,40 @@ async def api_strategy_manager_list():
             item["score_max_dd_avg"] = sc.get("score_max_dd_avg", 0.0)
             item["score_trades_avg"] = sc.get("score_trades_avg", 0.0)
             out.append(item)
-        return {"status": "success", "strategies": out}
+        total = len(out)
+        force_all = bool(all)
+        if force_all:
+            return {
+                "status": "success",
+                "strategies": out,
+                "total": total,
+                "page": 1,
+                "page_size": total,
+                "has_next": False
+            }
+        if page is None or page_size is None:
+            return {
+                "status": "success",
+                "strategies": out,
+                "total": total,
+                "page": 1,
+                "page_size": total,
+                "has_next": False
+            }
+        p = max(1, int(page))
+        ps = max(1, min(int(page_size), 200))
+        start = (p - 1) * ps
+        end = start + ps
+        sliced = out[start:end]
+        has_next = end < total
+        return {
+            "status": "success",
+            "strategies": sliced,
+            "total": total,
+            "page": p,
+            "page_size": ps,
+            "has_next": has_next
+        }
     except Exception as e:
         logger.error(f"/api/strategy_manager/list failed: {e}", exc_info=True)
         return {"status": "error", "msg": str(e), "strategies": []}
@@ -1168,6 +1444,15 @@ async def api_strategy_manager_analyze_market(req: StrategyMarketAnalyzeRequest)
     }
 
 
+@app.get("/api/strategy_manager/next_id")
+async def api_strategy_manager_next_id():
+    try:
+        return {"status": "success", "strategy_id": next_custom_strategy_id()}
+    except Exception as e:
+        logger.error(f"/api/strategy_manager/next_id failed: {e}", exc_info=True)
+        return {"status": "error", "msg": str(e), "strategy_id": ""}
+
+
 @app.post("/api/strategy_manager/add")
 async def api_strategy_manager_add(req: StrategyAddRequest):
     try:
@@ -1185,7 +1470,11 @@ async def api_strategy_manager_add(req: StrategyAddRequest):
         class_name = _extract_first_class_name(code_text) or (req.class_name or "")
         strategy_intent = req.strategy_intent
         if not isinstance(strategy_intent, dict):
-            strategy_intent = intent_engine.from_human_input(req.template_text or req.analysis_text or req.strategy_name).to_dict()
+            source = str(req.source or "").strip().lower()
+            if source == "market":
+                strategy_intent = intent_engine.from_market_analysis({}).to_dict()
+            else:
+                strategy_intent = intent_engine.from_human_input(req.template_text or req.analysis_text or req.strategy_name).to_dict()
         add_custom_strategy({
             "id": req.strategy_id,
             "name": req.strategy_name,
@@ -1303,12 +1592,12 @@ async def api_save_config(req: ConfigUpdateRequest):
         current_provider_source = config.get("data_provider.source", "default")
         live_enabled = is_live_enabled()
         restarted = False
-        if current_cabinet and type(current_cabinet).__name__ == "LiveCabinet":
-            stock_code = getattr(current_cabinet, "stock_code", None)
-            if cabinet_task and not cabinet_task.done():
-                cabinet_task.cancel()
-            if live_enabled and stock_code:
-                cabinet_task = asyncio.create_task(run_cabinet_task(stock_code))
+        running_codes = _live_running_codes()
+        if running_codes:
+            await _stop_live_tasks(running_codes)
+            if live_enabled:
+                for stock_code in running_codes:
+                    live_tasks[stock_code] = asyncio.create_task(run_cabinet_task(stock_code))
                 restarted = True
         await manager.broadcast({"type": "system", "data": {"msg": "配置已更新并生效"}})
         return {"status": "success", "msg": "config saved", "live_restarted": restarted, "live_enabled": live_enabled, "log_level": applied_log_level, "mode": _system_mode(config)}
@@ -2090,6 +2379,8 @@ async def api_start_backtest(req: BacktestRequest):
     )
     if cabinet_task and not cabinet_task.done():
         cabinet_task.cancel()
+    if _live_running_codes():
+        await _stop_live_tasks(clear_profile=True)
     report_id = start_new_backtest_report(req.stock_code, req.strategy_id, {
         "stock_code": req.stock_code,
         "strategy_id": req.strategy_id,
@@ -2110,31 +2401,80 @@ async def api_start_live(req: LiveRequest):
     global cabinet_task
     if cabinet_task and not cabinet_task.done():
         cabinet_task.cancel()
-    cabinet_task = asyncio.create_task(run_cabinet_task(req.stock_code))
-    return {"status": "success", "msg": f"Live monitoring started for {req.stock_code}"}
+    _clear_live_last_error()
+    codes = _normalize_live_codes(stock_code=req.stock_code, stock_codes=req.stock_codes)
+    common_selection = _normalize_strategy_selection(strategy_id=req.strategy_id, strategy_ids=req.strategy_ids)
+    stock_strategy_map = _normalize_stock_strategy_map(req.stock_strategy_map)
+    if bool(req.replace_existing):
+        await _stop_live_tasks(clear_profile=True)
+    started = []
+    already_running = []
+    for stock_code in codes:
+        if stock_code in stock_strategy_map:
+            live_strategy_profiles[stock_code] = stock_strategy_map[stock_code]
+        elif common_selection is not None:
+            live_strategy_profiles[stock_code] = common_selection
+        task = live_tasks.get(stock_code)
+        if task and not task.done():
+            already_running.append(stock_code)
+            continue
+        live_tasks[stock_code] = asyncio.create_task(run_cabinet_task(stock_code))
+        started.append(stock_code)
+    if not started and already_running:
+        return {"status": "info", "msg": "all targets already running", "running_codes": _live_running_codes(), "strategy_profiles": _profile_snapshot()}
+    summary_text = _format_live_start_summary(started)
+    await _broadcast_system_and_notify(f"当前实盘已启动：{summary_text}", started)
+    return {"status": "success", "msg": f"Live monitoring started for {','.join(started)}", "started_codes": started, "running_codes": _live_running_codes(), "strategy_profiles": _profile_snapshot()}
 
 @app.post("/api/control/stop")
 async def api_stop_task():
     """Stop the current running task"""
     global cabinet_task
+    stopped_live = []
+    if _live_running_codes():
+        stopped_live = await _stop_live_tasks(clear_profile=True)
+        await manager.broadcast({"type": "system", "data": {"msg": "内阁监控已手动停止"}})
     if cabinet_task and not cabinet_task.done():
         cabinet_task.cancel()
         if current_backtest_report and str(current_backtest_report.get("status", "")).lower() == "running":
             cancel_current_backtest_report("backtest task cancelled by user")
             await manager.broadcast({"type": "system", "data": {"msg": "回测已手动终止"}})
-            return {"status": "success", "msg": "Backtest stopped"}
-        await manager.broadcast({"type": "system", "data": {"msg": "内阁监控已手动停止"}})
-        return {"status": "success", "msg": "Task stopped"}
+            return {"status": "success", "msg": "Backtest stopped", "stopped_live_codes": stopped_live}
+        return {"status": "success", "msg": "Task stopped", "stopped_live_codes": stopped_live}
+    if stopped_live:
+        return {"status": "success", "msg": "Live stopped", "stopped_live_codes": stopped_live}
     return {"status": "info", "msg": "No task is currently running"}
 
 @app.post("/api/control/switch_strategy")
 async def api_switch_strategy(req: StrategySwitchRequest):
     """Switch the active strategy on the fly"""
-    global current_cabinet
-    selected = req.strategy_ids if req.strategy_ids else req.strategy_id
-    if current_cabinet:
-        current_cabinet.set_active_strategies(selected if selected else 'all')
-        return {"status": "success", "msg": f"Strategy switched to {selected}"}
+    selected = _normalize_strategy_selection(strategy_id=req.strategy_id, strategy_ids=req.strategy_ids)
+    per_stock_selection = _normalize_stock_strategy_map(req.stock_strategy_map)
+    target_codes = _normalize_live_codes(stock_codes=req.stock_codes, use_default=False) if isinstance(req.stock_codes, list) and req.stock_codes else list(live_cabinets.keys())
+    updated = []
+    for code, pick in per_stock_selection.items():
+        live_strategy_profiles[code] = pick
+        cab = live_cabinets.get(code)
+        if cab:
+            cab.set_active_strategies(pick)
+            updated.append(code)
+    if selected is not None:
+        for code in target_codes:
+            live_strategy_profiles[code] = selected
+            cab = live_cabinets.get(code)
+            if cab:
+                cab.set_active_strategies(selected)
+                if code not in updated:
+                    updated.append(code)
+        if current_cabinet and (not target_codes):
+            current_cabinet.set_active_strategies(selected)
+            code = str(getattr(current_cabinet, "stock_code", "") or "").upper()
+            if code:
+                live_strategy_profiles[code] = selected
+                if code not in updated:
+                    updated.append(code)
+    if updated:
+        return {"status": "success", "msg": "Strategy switched", "updated_codes": updated, "strategy_profiles": _profile_snapshot()}
     return {"status": "error", "msg": "No active cabinet running"}
 
 @app.post("/api/control/set_source")
@@ -2149,16 +2489,14 @@ async def api_set_source(req: SourceSwitchRequest):
     config = ConfigLoader.reload()
     current_provider_source = source
     restarted = False
-    stock_code = None
-    if current_cabinet and type(current_cabinet).__name__ == "LiveCabinet":
-        stock_code = getattr(current_cabinet, "stock_code", None)
-    if stock_code:
-        if cabinet_task and not cabinet_task.done():
-            cabinet_task.cancel()
-        cabinet_task = asyncio.create_task(run_cabinet_task(stock_code))
+    running_codes = _live_running_codes()
+    if running_codes:
+        await _stop_live_tasks(running_codes)
+        for stock_code in running_codes:
+            live_tasks[stock_code] = asyncio.create_task(run_cabinet_task(stock_code))
         restarted = True
     await manager.broadcast({"type": "system", "data": {"msg": f"数据源已切换为 {source}"}})
-    return {"status": "success", "msg": f"source switched to {source}", "source": source, "live_restarted": restarted}
+    return {"status": "success", "msg": f"source switched to {source}", "source": source, "live_restarted": restarted, "running_codes": _live_running_codes()}
 
 @app.post("/api/control/reload_strategies")
 async def api_reload_strategies():
@@ -2193,10 +2531,19 @@ async def api_reload_strategies():
 @app.get("/api/status")
 async def api_get_status():
     """Get current system status"""
-    is_running = cabinet_task is not None and not cabinet_task.done()
+    backtest_running = cabinet_task is not None and not cabinet_task.done()
+    running_codes = _live_running_codes()
+    is_running = backtest_running or bool(running_codes)
     return {
         "is_running": is_running,
+        "backtest_running": backtest_running,
+        "live_running": bool(running_codes),
+        "live_running_codes": running_codes,
+        "live_task_count": len(running_codes),
+        "live_strategy_profiles": _profile_snapshot(running_codes),
+        "live_fund_pools": _collect_live_fund_pools(),
         "active_cabinet_type": type(current_cabinet).__name__ if current_cabinet else None,
+        "live_last_error": live_last_error,
         "provider_source": current_provider_source or config.get("data_provider.source", "default"),
         "live_enabled": is_live_enabled(),
         "progress": current_backtest_progress,
@@ -2204,6 +2551,82 @@ async def api_get_status():
         "current_report_status": current_backtest_report.get("status") if current_backtest_report else None,
         "current_report_error": current_backtest_report.get("error_msg") if current_backtest_report else None
     }
+
+@app.get("/api/live/fund_pool")
+async def api_get_live_fund_pool(stock_code: Optional[str] = None, include_transactions: bool = False, tx_limit: int = 200):
+    limit = max(1, min(int(tx_limit or 200), 5000))
+    if stock_code:
+        snap = _load_live_fund_pool_snapshot(stock_code, include_transactions=include_transactions, tx_limit=limit)
+        if snap is None:
+            return {"status": "error", "msg": "fund pool not found", "stock_code": str(stock_code).upper()}
+        return {"status": "success", "stock_code": str(stock_code).upper(), "fund_pool": snap}
+    return {"status": "success", "fund_pools": _collect_live_fund_pools(include_transactions=include_transactions, tx_limit=limit)}
+
+@app.post("/api/live/fund_pool/reset")
+async def api_reset_live_fund_pool(req: LiveFundPoolResetRequest):
+    code = str(req.stock_code or "").strip().upper()
+    if not code:
+        return {"status": "error", "msg": "stock_code required"}
+    cfg = ConfigLoader.reload()
+    cap = float(req.initial_capital) if req.initial_capital is not None else float(cfg.get("system.initial_capital", 1000000.0) or 1000000.0)
+    if cap <= 0:
+        return {"status": "error", "msg": "initial_capital must be positive"}
+    cab = live_cabinets.get(code)
+    if cab is not None:
+        cab.revenue.initial_capital = cap
+        cab.revenue.cash = cap
+        cab.revenue.transactions = []
+        cab.revenue.total_commission = 0.0
+        cab.revenue.total_stamp_duty = 0.0
+        cab.revenue.total_transfer_fee = 0.0
+        cab.state_affairs.positions = {}
+        cab.peak_fund_value = cap
+        cab._persist_virtual_fund_pool()
+        await emit_event_to_ws("fund_pool", cab.get_fund_pool_snapshot(include_transactions=False), stock_code=code)
+        return {"status": "success", "msg": f"fund pool reset: {code}", "fund_pool": cab.get_fund_pool_snapshot(include_transactions=False)}
+    payload = _empty_live_fund_pool_state(code, cap)
+    _write_json_file(_live_fund_pool_file(code), payload)
+    return {"status": "success", "msg": f"fund pool reset: {code}", "fund_pool": payload.get("state", {})}
+
+@app.get("/api/webhook/failed")
+async def api_webhook_failed(limit: int = 200):
+    if not is_live_enabled():
+        return {"status": "error", "msg": "当前为回测模式，推送补偿仅在实盘模式可用"}
+    try:
+        events = webhook_notifier.get_failed_events(limit=max(1, min(int(limit or 200), 1000)))
+        return {"status": "success", "events": events, "count": len(events)}
+    except Exception as e:
+        logger.error("list webhook failed queue error: %s", e, exc_info=True)
+        return {"status": "error", "msg": str(e)}
+
+@app.post("/api/webhook/failed/retry")
+async def api_webhook_retry_failed(req: WebhookRetryRequest):
+    if not is_live_enabled():
+        return {"status": "error", "msg": "当前为回测模式，推送补偿仅在实盘模式可用"}
+    try:
+        result = await webhook_notifier.retry_failed_events(
+            event_ids=req.event_ids if isinstance(req.event_ids, list) else None,
+            limit=max(1, min(int(req.limit or 20), 500))
+        )
+        events = webhook_notifier.get_failed_events(limit=200)
+        return {"status": "success", "result": result, "events": events, "count": len(events)}
+    except Exception as e:
+        logger.error("retry webhook failed queue error: %s", e, exc_info=True)
+        return {"status": "error", "msg": str(e)}
+
+@app.post("/api/webhook/failed/delete")
+async def api_webhook_delete_failed(req: WebhookDeleteRequest):
+    if not is_live_enabled():
+        return {"status": "error", "msg": "当前为回测模式，推送补偿仅在实盘模式可用"}
+    try:
+        result = webhook_notifier.delete_failed_events(
+            event_ids=req.event_ids if isinstance(req.event_ids, list) else None
+        )
+        events = webhook_notifier.get_failed_events(limit=200)
+        return {"status": "success", "result": result, "events": events, "count": len(events)}
+    except Exception as e:
+        logger.error("delete webhook failed queue error: %s", e, exc_info=True)
+        return {"status": "error", "msg": str(e)}
 
 def _history_sync_payload_from_request(req: HistorySyncRunRequest):
     cfg = ConfigLoader.reload()
@@ -2419,16 +2842,37 @@ async def websocket_endpoint(websocket: WebSocket):
                     if not is_live_enabled():
                         await manager.broadcast({"type": "system", "data": {"msg": "Live功能已禁用（需 system.enable_live=true 且 system.mode=live）"}})
                         continue
-                    stock_code = cmd.get("stock", _default_target_code())
-                    # Start async task
-                    # Check if already running?
-                    # The wrapper run_cabinet_task handles new instance creation.
-                    # But we need to track the task to cancel it later.
-                    global cabinet_task
                     if cabinet_task and not cabinet_task.done():
                         cabinet_task.cancel()
-                        
-                    cabinet_task = asyncio.create_task(run_cabinet_task(stock_code))
+                    _clear_live_last_error()
+                    replace_existing = bool(cmd.get("replace_existing", True))
+                    codes = _normalize_live_codes(
+                        stock_code=cmd.get("stock"),
+                        stock_codes=cmd.get("stocks")
+                    )
+                    common_selection = _normalize_strategy_selection(strategy_id=cmd.get("strategy"), strategy_ids=cmd.get("strategy_ids"))
+                    stock_strategy_map = _normalize_stock_strategy_map(cmd.get("stock_strategy_map"))
+                    if replace_existing:
+                        await _stop_live_tasks(clear_profile=True)
+                    started = []
+                    already_running = []
+                    for stock_code in codes:
+                        if stock_code in stock_strategy_map:
+                            live_strategy_profiles[stock_code] = stock_strategy_map[stock_code]
+                        elif common_selection is not None:
+                            live_strategy_profiles[stock_code] = common_selection
+                        task = live_tasks.get(stock_code)
+                        if task and not task.done():
+                            already_running.append(stock_code)
+                            continue
+                        live_tasks[stock_code] = asyncio.create_task(run_cabinet_task(stock_code))
+                        started.append(stock_code)
+                    text = (
+                        f"当前实盘已启动：{_format_live_start_summary(started)}"
+                        if started
+                        else f"目标已在运行中: {','.join(already_running)}"
+                    )
+                    await _broadcast_system_and_notify(text, started)
                 
                 elif cmd.get("type") == "start_backtest":
                     cfg = ConfigLoader.reload()
@@ -2445,6 +2889,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                     if cabinet_task and not cabinet_task.done():
                         cabinet_task.cancel()
+                    if _live_running_codes():
+                        await _stop_live_tasks()
                     start_new_backtest_report(stock_code, strategy_id, {
                         "stock_code": stock_code,
                         "strategy_id": strategy_id,
@@ -2467,19 +2913,35 @@ async def websocket_endpoint(websocket: WebSocket):
                     })
                 
                 elif cmd.get("type") == "switch_strategy":
-                    # Handle strategy switch
-                    strategy_id = cmd.get("id")
-                    strategy_ids = cmd.get("ids")
-                    selected = strategy_ids if strategy_ids else strategy_id
+                    selected = _normalize_strategy_selection(strategy_id=cmd.get("id"), strategy_ids=cmd.get("ids"))
                     print(f"Switching to strategy: {selected}")
-                    if current_cabinet:
-                        current_cabinet.set_active_strategies(selected if selected else 'all')
+                    per_stock_selection = _normalize_stock_strategy_map(cmd.get("stock_strategy_map"))
+                    target_codes = _normalize_live_codes(stock_codes=cmd.get("stocks"), use_default=False) if isinstance(cmd.get("stocks"), list) else list(live_cabinets.keys())
+                    for code, pick in per_stock_selection.items():
+                        live_strategy_profiles[code] = pick
+                        cab = live_cabinets.get(code)
+                        if cab:
+                            cab.set_active_strategies(pick)
+                    if selected is not None:
+                        for code in target_codes:
+                            live_strategy_profiles[code] = selected
+                            cab = live_cabinets.get(code)
+                            if cab:
+                                cab.set_active_strategies(selected)
+                        if current_cabinet and (not target_codes):
+                            current_cabinet.set_active_strategies(selected)
+                            code = str(getattr(current_cabinet, "stock_code", "") or "").upper()
+                            if code:
+                                live_strategy_profiles[code] = selected
                 
                 elif cmd.get("type") == "stop_simulation":
-                     if cabinet_task and not cabinet_task.done():
-                         print("Stopping Cabinet Task...")
-                         cabinet_task.cancel()
-                         await manager.broadcast({"type": "system", "data": {"msg": "内阁监控已手动停止"}})
+                    stop_codes = cmd.get("stocks")
+                    if isinstance(stop_codes, list) and stop_codes:
+                        stopped = await _stop_live_tasks(stop_codes, clear_profile=True)
+                    else:
+                        stopped = await _stop_live_tasks(clear_profile=True)
+                    if stopped:
+                        await manager.broadcast({"type": "system", "data": {"msg": f"内阁监控已手动停止: {','.join(stopped)}"}})
                 
                 elif cmd.get("type") == "stop_backtest":
                     if cabinet_task and not cabinet_task.done():
@@ -2501,6 +2963,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 async def run_cabinet_task(stock_code):
     """Wrapper to run cabinet live loop"""
+    global current_cabinet
     if not is_live_enabled():
         await manager.broadcast({"type": "system", "data": {"msg": "Live功能已在配置中关闭，无法启动监控"}})
         return
@@ -2514,20 +2977,38 @@ async def run_cabinet_task(stock_code):
     provider_source = current_provider_source or config.get("data_provider.source", "default")
     current_provider_source = provider_source
     
+    async def _callback(event_type, data):
+        await emit_event_to_ws(event_type, data, stock_code=stock_code)
+
     cab = LiveCabinet(
         stock_code=stock_code,
         initial_capital=float(config.get("system.initial_capital", 1000000.0) or 1000000.0),
         provider_type=provider_source,
-        event_callback=emit_event_to_ws
+        event_callback=_callback
     )
-    
-    global current_cabinet
+    profile = live_strategy_profiles.get(stock_code)
+    if profile is not None:
+        cab.set_active_strategies(profile)
+    live_cabinets[stock_code] = cab
     current_cabinet = cab
     
     try:
         await cab.run_live()
     except asyncio.CancelledError:
         print("Cabinet Task Cancelled")
+    except Exception as e:
+        _set_live_last_error(stock_code=stock_code, stage="run_cabinet_task", err=e, tb_text=traceback.format_exc())
+        logger.error("run_cabinet_task failed stock=%s err=%s", stock_code, e, exc_info=True)
+        await manager.broadcast({"type": "system", "data": {"msg": f"实盘任务异常退出 {stock_code}: {e}"}})
+    finally:
+        try:
+            cab._persist_virtual_fund_pool()
+        except Exception:
+            pass
+        live_tasks.pop(stock_code, None)
+        live_cabinets.pop(stock_code, None)
+        if current_cabinet is cab:
+            current_cabinet = next(iter(live_cabinets.values()), None)
 
 async def run_backtest_task(stock_code, strategy_id, strategy_mode=None, start=None, end=None, capital=None, strategy_ids=None):
     """Wrapper to run backtest"""
@@ -2588,46 +3069,81 @@ async def run_backtest_task(stock_code, strategy_id, strategy_mode=None, start=N
         logger.error(f"run_backtest_task failed: {e}", exc_info=True)
         fail_current_backtest_report(str(e))
 
-async def emit_event_to_ws(event_type, data):
+async def emit_event_to_ws(event_type, data, stock_code=None):
     global latest_backtest_result, latest_strategy_reports, current_backtest_report, current_backtest_progress, current_backtest_trades
+    emit_data = data
+    if stock_code:
+        if isinstance(data, dict):
+            emit_data = dict(data)
+            emit_data["stock_code"] = stock_code
     if event_type == "backtest_result":
-        latest_backtest_result = data
+        latest_backtest_result = emit_data
         if current_backtest_report is not None:
-            current_backtest_report["summary"] = data
-            current_backtest_report["ranking"] = data.get("ranking", [])
+            current_backtest_report["summary"] = emit_data
+            current_backtest_report["ranking"] = emit_data.get("ranking", [])
             current_backtest_report["status"] = "success"
             current_backtest_report["error_msg"] = None
             current_backtest_report["finished_at"] = datetime.now().isoformat(timespec="seconds")
             finalize_current_backtest_report()
         current_backtest_progress = {"progress": 100, "current_date": "Done"}
     elif event_type == "backtest_progress":
-        current_backtest_progress = data
+        current_backtest_progress = emit_data
     elif event_type == "backtest_failed":
-        msg = data.get("msg") if isinstance(data, dict) else str(data)
+        msg = emit_data.get("msg") if isinstance(emit_data, dict) else str(emit_data)
         fail_current_backtest_report(msg)
         current_backtest_progress = {"progress": current_backtest_progress.get("progress", 0), "current_date": "Failed"}
     elif event_type == "backtest_strategy_report":
-        sid = str(data.get("strategy_id", ""))
+        sid = str(emit_data.get("strategy_id", ""))
         if sid:
-            latest_strategy_reports[sid] = data
+            latest_strategy_reports[sid] = emit_data
             if current_backtest_report is not None:
-                current_backtest_report["strategy_reports"][sid] = data
+                current_backtest_report["strategy_reports"][sid] = emit_data
     elif event_type == "backtest_trade":
-        if isinstance(data, dict):
+        if isinstance(emit_data, dict):
             current_backtest_trades.append({
-                "dt": str(data.get("dt", "")),
-                "strategy": str(data.get("strategy", "")),
-                "code": str(data.get("code", "")),
-                "dir": str(data.get("dir", "")),
-                "price": float(data.get("price", 0.0) or 0.0),
-                "qty": int(data.get("qty", 0) or 0)
+                "dt": str(emit_data.get("dt", "")),
+                "strategy": str(emit_data.get("strategy", "")),
+                "code": str(emit_data.get("code", "")),
+                "dir": str(emit_data.get("dir", "")),
+                "price": float(emit_data.get("price", 0.0) or 0.0),
+                "qty": int(emit_data.get("qty", 0) or 0)
             })
-    # print(f"Emit: {event_type}")
     payload = {
         "type": event_type,
-        "data": data
+        "data": emit_data
     }
+    if stock_code:
+        payload["stock_code"] = stock_code
     await manager.broadcast(payload)
+    if stock_code:
+        skip_system_notify = False
+        if event_type == "system" and isinstance(emit_data, dict):
+            msg = str(emit_data.get("msg", "") or "")
+            if (
+                ("内阁实时监控已启动" in msg)
+                or ("当前实盘已启动" in msg)
+                or ("正在拉取K线数据" in msg)
+            ):
+                skip_system_notify = True
+        if not skip_system_notify:
+            await webhook_notifier.notify(event_type=event_type, data=emit_data, stock_code=stock_code)
+
+async def _broadcast_system_and_notify(msg: str, stock_codes=None):
+    text = str(msg or "").strip()
+    if not text:
+        return
+    await manager.broadcast({"type": "system", "data": {"msg": text}})
+    codes = []
+    if isinstance(stock_codes, (list, tuple, set)):
+        for item in stock_codes:
+            code = str(item or "").strip().upper()
+            if code and code not in codes:
+                codes.append(code)
+    notify_data = {"msg": text}
+    if codes:
+        notify_data["stock_codes"] = codes
+    notify_stock_code = codes[0] if len(codes) == 1 else "MULTI"
+    await webhook_notifier.notify(event_type="system", data=notify_data, stock_code=notify_stock_code)
 
 @app.on_event("startup")
 async def startup_event():
@@ -2660,6 +3176,8 @@ async def shutdown_event():
     global history_sync_scheduler_task
     if cabinet_task:
         cabinet_task.cancel()
+    if _live_running_codes():
+        await _stop_live_tasks()
     if history_sync_scheduler_task and not history_sync_scheduler_task.done():
         history_sync_scheduler_task.cancel()
 

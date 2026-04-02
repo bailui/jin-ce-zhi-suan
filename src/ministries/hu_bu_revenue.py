@@ -39,7 +39,7 @@ class HuBuRevenue:
         total_cost = commission + stamp_duty + transfer_fee
         return total_cost, commission, stamp_duty, transfer_fee
 
-    def record_transaction(self, strategy_id, dt, direction, price, quantity, cost, pnl=0.0):
+    def record_transaction(self, strategy_id, dt, direction, price, quantity, cost, pnl=0.0, commission=0.0, stamp_duty=0.0, transfer_fee=0.0):
         """
         Record a transaction.
         """
@@ -53,7 +53,10 @@ class HuBuRevenue:
             'quantity': quantity,
             'amount': amount,
             'cost': cost,
-            'pnl': pnl # PnL is realized PnL for closing trades
+            'pnl': pnl,
+            'commission': float(commission or 0.0),
+            'stamp_duty': float(stamp_duty or 0.0),
+            'transfer_fee': float(transfer_fee or 0.0)
         })
         
         if direction == 'BUY':
@@ -61,7 +64,9 @@ class HuBuRevenue:
         elif direction == 'SELL':
             self.cash += (amount - cost) # Proceeds - Cost
             
-        self.total_commission += cost # simplified tracking, needs breakdown if required
+        self.total_commission += float(commission or 0.0)
+        self.total_stamp_duty += float(stamp_duty or 0.0)
+        self.total_transfer_fee += float(transfer_fee or 0.0)
         
     def update_daily_nav(self, dt, holdings_value):
         nav = self.cash + holdings_value

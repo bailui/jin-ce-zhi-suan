@@ -58,7 +58,8 @@ class BacktestCabinet:
 
         # Initialize Strategies
         # Get the latest strategies every time we start a backtest
-        use_active_filter = not bool(self.strategy_ids)
+        explicit_single = str(self.strategy_id or "").strip() not in {"", "all"}
+        use_active_filter = (not bool(self.strategy_ids)) and (not explicit_single)
         all_strategies = create_strategies(apply_active_filter=use_active_filter)
         if self.strategy_ids:
             allowed = {str(x).strip() for x in self.strategy_ids if str(x).strip()}
