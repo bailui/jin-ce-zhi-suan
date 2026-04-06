@@ -1,0 +1,39 @@
+name: Crypto Evolution Audit
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs every day at midnight UTC
+  workflow_dispatch:      # Allows manual trigger
+
+jobs:
+  audit_and_evolve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Daily Performance Audit
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+        run: |
+          # Use the auditor to analyze the last 24h
+          # (Note: In GitHub Actions, you'd need to fetch logs from your actual trading server
+          # or use this to run a daily backtest on the latest data)
+          python3 src/utils/performance_auditor.py
+
+      - name: Auto-Commit Strategy Evolutions
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "🤖 Auto-evolution: Strategy parameters optimized" || echo "No changes to commit"
+          git push
