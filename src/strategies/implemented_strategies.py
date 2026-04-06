@@ -3,6 +3,7 @@ from src.strategies.base_strategy import BaseStrategy
 from src.utils.indicators import Indicators
 import pandas as pd
 import numpy as np
+import math
 from src.utils.runtime_params import get_value
 
 class BaseImplementedStrategy(BaseStrategy):
@@ -22,26 +23,30 @@ class BaseImplementedStrategy(BaseStrategy):
         self.total_value = 0.0
         self.last_price = 0.0
 
-    def update_holding_time(self, code):
+    def preprocess(self, kline):
+        code = kline['code']
+        self.last_price = float(kline['close'])
         if code in self.positions and self.positions[code] > 0:
             self.bars_held[code] = self.bars_held.get(code, 0) + 1
         else:
             self.bars_held[code] = 0
             self.highest_high[code] = 0.0
             self.trailing_stop_level[code] = 0.0
-
-    def check_max_holding_time(self, code, max_bars):
-        if self.bars_held.get(code, 0) >= max_bars:
-            return True
-        return False
         
+        if not hasattr(self, 'data_history'): self.data_history = {}
+        if not isinstance(self.data_history, dict): self.data_history = {}
+            
+        if code not in self.data_history: self.data_history[code] = pd.DataFrame()
+        self.data_history[code] = pd.concat([self.data_history[code], pd.DataFrame([kline])], ignore_index=True).tail(5000)
+        return self.data_history[code]
+
     def create_exit_signal(self, kline, qty, reason):
         return {
             'strategy_id': self.id,
             'code': kline['code'],
             'dt': kline['dt'],
             'direction': 'SELL',
-            'price': kline['close'],
+            'price': float(kline['close']),
             'qty': qty,
             'reason': reason
         }
@@ -54,22 +59,34 @@ class BaseImplementedStrategy(BaseStrategy):
         return common if common is not None else default
 
     def _qty(self):
+        asset_class = str(get_value("system.asset_class", "equity")).strip().lower()
         mode = str(self._cfg("order_qty_mode", "fixed")).strip().lower()
-        fixed_qty = int(float(self._cfg("order_qty", 1000)))
+        fixed_qty = float(self._cfg("order_qty", 1000))
         if mode != "cash_pct":
-            return max(0, fixed_qty)
+            return max(0.0, fixed_qty)
         cash = float(
             getattr(self, "current_cash", None)
             if getattr(self, "current_cash", None) is not None
             else getattr(self, "available_cash", getattr(self, "cash", 0.0))
         )
         pct = float(self._cfg("order_cash_pct", 0.1))
-        price = float(getattr(self, "last_price", 0.0) or 0.0)
+        price = float(self.last_price or 0.0)
         if pct > 1:
             pct = pct / 100.0
         pct = max(0.0, min(1.0, pct))
         if cash <= 0 or price <= 0 or pct <= 0:
             return 0
+        if asset_class == "crypto":
+            step = float(get_value("trading_rules.qty_step", 0.0001))
+            min_qty = float(get_value("trading_rules.min_order_qty", step))
+            raw_qty = (cash * pct) / price
+            if step > 0:
+                stepped_qty = math.floor((raw_qty / step) + 1e-9) * step
+            else:
+                stepped_qty = raw_qty
+            if stepped_qty < min_qty:
+                return 0.0
+            return float(round(stepped_qty, 8))
         raw_qty = int((cash * pct) // price)
         lot_size = 100
         lot_qty = (raw_qty // lot_size) * lot_size
@@ -87,479 +104,348 @@ class BaseImplementedStrategy(BaseStrategy):
 
 class Strategy00(BaseImplementedStrategy):
     def __init__(self):
-        super().__init__("00", "长期持有一次买入", trigger_timeframe="D")
+        super().__init__("00", "00 - 长期持有策略", trigger_timeframe="D")
         self.entered = {}
         self.final_bar_dt = None
 
     def on_bar(self, kline):
         code = kline['code']
-        qty = int(self.positions.get(code, 0))
+        self.last_price = float(kline['close'])
+        qty = self.positions.get(code, 0)
         current_dt = pd.to_datetime(kline['dt'])
-
         if qty <= 0 and not self.entered.get(code, False):
-            price = float(kline.get('close', 0.0))
-            cash = float(getattr(self, "current_cash", 0.0) or 0.0)
-            raw_qty = int(cash // price) if price > 0 else 0
-            buy_qty = (raw_qty // 100) * 100
-            if buy_qty <= 0:
-                return None
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
             self.entered[code] = True
             return {
-                'strategy_id': self.id,
-                'code': code,
-                'dt': kline['dt'],
-                'direction': 'BUY',
-                'price': kline['close'],
-                'qty': buy_qty,
-                'stop_loss': 0.0,
-                'take_profit': None
+                'strategy_id': self.id, 'code': code, 'dt': kline['dt'],
+                'direction': 'BUY', 'price': kline['close'], 'qty': buy_qty,
+                'stop_loss': 0.0, 'take_profit': None
             }
-
         if qty > 0 and self.final_bar_dt is not None and current_dt >= pd.to_datetime(self.final_bar_dt):
             return self.create_exit_signal(kline, qty, "Backtest Last Bar Exit")
-
         return None
 
-# Strategy 01: 三周期共振波段策略
-class Strategy01(BaseImplementedStrategy):
+class Strategy10(BaseImplementedStrategy):
     def __init__(self):
-        super().__init__("01", "三周期共振波段", trigger_timeframe="60min")
-        self.history = {}
+        super().__init__("10", "10 - 均线引力趋势追踪", trigger_timeframe="1h")
 
     def on_bar(self, kline):
-        code = kline['code']
-        self.update_holding_time(code)
-        
-        if code not in self.history: self.history[code] = pd.DataFrame()
-        new_row = pd.DataFrame([kline])
-        self.history[code] = pd.concat([self.history[code], new_row], ignore_index=True)
-        
-        if len(self.history[code]) > 30000:
-             self.history[code] = self.history[code].iloc[-30000:]
-             
-        df = self.history[code]
-        if len(df) < int(self._cfg("min_history_bars", 500)): return None 
-        
-        qty = self.positions.get(code, 0)
-        
-        # Optimization: Use subsets for resampling
-        df_d_subset = df.iloc[-6000:]
-        df_d = Indicators.resample(df_d_subset, 'D')
-        if len(df_d) < 20: return None
-        df_d['ma10'] = Indicators.MA(df_d['close'], 10)
-        df_d['ma20'] = Indicators.MA(df_d['close'], 20)
-        curr_d = df_d.iloc[-1]
-        
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 100: return None
+        df_1h = Indicators.resample(df, "1h")
+        if len(df_1h) < 60: return None
+        df_1h["ema21"] = Indicators.EMA(df_1h["close"], 21)
+        df_1h["ema55"] = Indicators.EMA(df_1h["close"], 55)
+        df_1h["atr"] = Indicators.ATR(df_1h, 14)
+        df_1h = df_1h.dropna().reset_index(drop=True)
+        if len(df_1h) < 2: return None
+        curr, prev = df_1h.iloc[-1], df_1h.iloc[-2]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
         if qty > 0:
-            if curr_d['close'] < curr_d['ma20']:
-                return self.create_exit_signal(kline, qty, "Daily MA20 Breakdown")
+            self.highest_high[code] = max(self.highest_high.get(code, 0.0), float(curr["close"]))
+            trail = float(self.highest_high[code] - curr["atr"] * 3.5)
+            self.trailing_stop_level[code] = max(self.trailing_stop_level.get(code, 0.0), trail)
+            if float(curr["close"]) <= self.trailing_stop_level[code] or curr["ema21"] < curr["ema55"]:
+                return self.create_exit_signal(kline, qty, "Exit")
             return None
-
-        # Weekly
-        df_w = Indicators.resample(df, 'W')
-        if len(df_w) < 20: return None
-        df_w['ma20'] = Indicators.MA(df_w['close'], 20)
-
-        # 60 Min
-        df_recent = df.iloc[-2000:]
-        df_60m = Indicators.resample(df_recent, '60min')
-        if len(df_60m) < 35: return None
-        df_60m['dif'], df_60m['dea'], df_60m['macd'] = Indicators.MACD(df_60m['close'])
-        
-        curr_60m = df_60m.iloc[-1]
-        prev_60m = df_60m.iloc[-2]
-            
-        # Entry
-        if len(df_w) >= 2 and df_w.iloc[-1]['ma20'] > df_w.iloc[-2]['ma20']:
-            if abs(curr_d['low'] - curr_d['ma10']) / curr_d['ma10'] < float(self._cfg("daily_ma10_tolerance", 0.02)):
-                if curr_60m['dif'] > curr_60m['dea'] and prev_60m['dif'] <= prev_60m['dea']:
-                    vol_ma5 = df_60m['vol'].rolling(int(self._cfg("volume_ma_window", 5))).mean().iloc[-1]
-                    if curr_60m['vol'] > vol_ma5:
-                        return {
-                            'strategy_id': self.id,
-                            'code': code,
-                            'dt': kline['dt'],
-                            'direction': 'BUY',
-                            'price': kline['close'],
-                            'qty': self._qty(),
-                            'stop_loss': kline['close'] * (1 - float(self._cfg("stop_loss_pct", 0.03))),
-                            'take_profit': None
-                        }
+        if prev["ema21"] <= prev["ema55"] and curr["ema21"] > curr["ema55"]:
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
+            stop = float(curr["close"] - curr["atr"] * 2.5)
+            self.trailing_stop_level[code] = stop
+            self.highest_high[code] = float(curr["close"])
+            return {'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 'stop_loss': stop, 'take_profit': None}
         return None
 
-# Strategy 02: 短线弱转强烂板战法
-class Strategy02(BaseImplementedStrategy):
+class Strategy11(BaseImplementedStrategy):
     def __init__(self):
-        super().__init__("02", "短线弱转强烂板", trigger_timeframe="1min")
-        self.history = {}
+        super().__init__("11", "11 - 唐奇安通道破位捕捉", trigger_timeframe="1h")
 
     def on_bar(self, kline):
-        code = kline['code']
-        self.update_holding_time(code)
-        if code not in self.history: self.history[code] = pd.DataFrame()
-        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(500)
-        
-        qty = self.positions.get(code, 0)
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 100: return None
+        df_1h = Indicators.resample(df, "1h")
+        if len(df_1h) < 30: return None
+        df_1h["ema200"] = Indicators.EMA(df_1h["close"], 200)
+        df_1h = df_1h.dropna().reset_index(drop=True)
+        if len(df_1h) < 21: return None
+        curr = df_1h.iloc[-1]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
+        breakout_h = float(df_1h["high"].iloc[-21:-1].max())
+        exit_l = float(df_1h["low"].iloc[-11:-1].min())
         if qty > 0:
-            if self.check_max_holding_time(code, int(self._cfg("max_hold_bars", 240))): 
-                return self.create_exit_signal(kline, qty, "Next Day Exit")
+            if float(curr["close"]) < exit_l:
+                return self.create_exit_signal(kline, qty, "Exit")
             return None
+        if float(curr["close"]) > breakout_h:
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
+            return {'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 'stop_loss': exit_l, 'take_profit': None}
         return None
 
-# Strategy 03: ETF行业轮动
-class Strategy03(BaseImplementedStrategy):
+class Strategy12(BaseImplementedStrategy):
     def __init__(self):
-        super().__init__("03", "ETF行业轮动", trigger_timeframe="D")
-        self.history = {}
+        super().__init__("12", "12 - ATR 波动率自适应", trigger_timeframe="15min")
 
     def on_bar(self, kline):
-        code = kline['code']
-        if code not in self.history: self.history[code] = pd.DataFrame()
-        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(2400)
-        df = self.history[code]
-        
-        if len(df) < 240: return None
-        
-        df_d = Indicators.resample(df, 'D')
-        if len(df_d) < 10: return None
-        df_d['ma10'] = Indicators.MA(df_d['close'], 10)
-        curr_d = df_d.iloc[-1]
-        
-        qty = self.positions.get(code, 0)
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 100: return None
+        df_15m = Indicators.resample(df, "15min")
+        if len(df_15m) < 30: return None
+        df_15m["ema20"] = Indicators.EMA(df_15m["close"], 20)
+        df_15m["atr"] = Indicators.ATR(df_15m, 20)
+        df_15m["kc_upper"] = df_15m["ema20"] + (df_15m["atr"] * 2.0)
+        df_15m["kc_lower"] = df_15m["ema20"] - (df_15m["atr"] * 2.0)
+        df_15m = df_15m.dropna().reset_index(drop=True)
+        if len(df_15m) < 2: return None
+        curr = df_15m.iloc[-1]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
         if qty > 0:
-            if curr_d['close'] < curr_d['ma10']:
-                return self.create_exit_signal(kline, qty, "Break MA10")
+            if float(curr["close"]) < float(curr["ema20"]): return self.create_exit_signal(kline, qty, "Exit")
             return None
-            
-        if curr_d['close'] > curr_d['ma10']:
-             return {
-                'strategy_id': self.id,
-                'code': code,
-                'dt': kline['dt'],
-                'direction': 'BUY',
-                'price': kline['close'],
-                'qty': self._qty(),
-                'stop_loss': kline['close'] * (1 - float(self._cfg("stop_loss_pct", 0.05))),
-                'take_profit': None
-            }
+        if float(curr["close"]) > float(curr["kc_upper"]):
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
+            return {'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 'stop_loss': float(curr["kc_lower"]), 'take_profit': None}
         return None
 
-# Strategy 04: 龙头首阴反包
-class Strategy04(BaseImplementedStrategy):
+class Strategy13(BaseImplementedStrategy):
     def __init__(self):
-        super().__init__("04", "龙头首阴反包", trigger_timeframe="D")
-    def on_bar(self, kline):
-        return None
-
-# Strategy 05: 3N法则主升浪
-class Strategy05(BaseImplementedStrategy):
-    def __init__(self):
-        super().__init__("05", "3N法则主升浪", trigger_timeframe="30min")
-        self.history = {}
+        super().__init__("13", "13 - 布林极限均值回归", trigger_timeframe="1h")
 
     def on_bar(self, kline):
-        code = kline['code']
-        self.update_holding_time(code)
-        if code not in self.history: self.history[code] = pd.DataFrame()
-        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(5000)
-        df = self.history[code]
-        
-        qty = self.positions.get(code, 0)
-        
-        df_30m = Indicators.resample(df, '30min')
-        if len(df_30m) < int(self._cfg("min_30m_bars", 20)): return None
-        df_30m['dif'], df_30m['dea'], df_30m['macd'] = Indicators.MACD(df_30m['close'])
-        curr = df_30m.iloc[-1]
-        
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 150: return None
+        df_1h = Indicators.resample(df, "1h")
+        if len(df_1h) < 40: return None
+        df_1h["rsi"] = Indicators.RSI(df_1h["close"], 14)
+        up, mid, lw = Indicators.BollingerBands(df_1h["close"], 20, 2.0)
+        df_1h["bb_mid"], df_1h["bb_lower"] = mid, lw
+        df_1h["atr"] = Indicators.ATR(df_1h, 14)
+        df_1h = df_1h.dropna().reset_index(drop=True)
+        if len(df_1h) < 2: return None
+        curr, prev = df_1h.iloc[-1], df_1h.iloc[-2]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
         if qty > 0:
-             if self.check_max_holding_time(code, int(self._cfg("max_hold_bars", 1200))): 
-                 return self.create_exit_signal(kline, qty, "Time 5 Days")
-             return None
-             
-        if curr['dif'] > curr['dea'] and curr['dif'] > 0:
-            if curr['vol'] > df_30m['vol'].rolling(int(self._cfg("volume_ma_window", 5))).mean().iloc[-1] * float(self._cfg("volume_multiple", 1.5)):
-                 return {
-                    'strategy_id': self.id,
-                    'code': code,
-                    'dt': kline['dt'],
-                    'direction': 'BUY',
-                    'price': kline['close'],
-                    'qty': self._qty(),
-                    'stop_loss': kline['close'] * (1 - float(self._cfg("stop_loss_pct", 0.05))),
-                    'take_profit': kline['close'] * (1 + float(self._cfg("take_profit_pct", 0.10)))
-                }
-        return None
-
-# Strategy 06: 海豚交易法
-class Strategy06(BaseImplementedStrategy):
-    def __init__(self):
-        super().__init__("06", "海豚交易法", trigger_timeframe="1min")
-        self.history = {}
-
-    def on_bar(self, kline):
-        code = kline['code']
-        self.update_holding_time(code)
-        if code not in self.history: self.history[code] = pd.DataFrame()
-        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(500)
-        df = self.history[code]
-        if len(df) < int(self._cfg("min_history_bars", 50)): return None
-        
-        # MA26 for Trend
-        ma_period = int(self._cfg("ma_period", 26))
-        df['ma26'] = Indicators.MA(df['close'], ma_period)
-        # MACD
-        df['dif'], df['dea'], df['macd'] = Indicators.MACD(df['close'])
-        
-        curr = df.iloc[-1]
-        prev = df.iloc[-2]
-        qty = self.positions.get(code, 0)
-        
-        # Trailing Stop Logic (1% below High)
-        if qty > 0:
-            if curr['high'] > self.highest_high.get(code, 0.0):
-                self.highest_high[code] = curr['high']
-                # Update Trailing Stop: 1% below new high
-                self.trailing_stop_level[code] = self.highest_high[code] * (1 - float(self._cfg("trailing_stop_pct", 0.01)))
-            
-            # Check Trailing Stop
-            if curr['low'] <= self.trailing_stop_level.get(code, 0.0):
-                return self.create_exit_signal(kline, qty, f"Trailing Stop (High {self.highest_high[code]:.2f})")
-                
+            if float(curr["close"]) >= float(curr["bb_mid"]) or float(curr["rsi"]) > 65:
+                return self.create_exit_signal(kline, qty, "TakeProfit")
             return None
-            
-        # Entry Long
-        # Price > MA26 + MACD Gold Cross above Zero
-        if curr['close'] > curr['ma26']:
-            # Gold Cross: DIF > DEA now, DIF <= DEA before
-            if curr['dif'] > curr['dea'] and prev['dif'] <= prev['dea']:
-                # "Water Top" (Above Zero)
-                if curr['dif'] > 0 and curr['dea'] > 0:
-                    self.highest_high[code] = curr['close']
-                    self.trailing_stop_level[code] = curr['close'] * (1 - float(self._cfg("trailing_stop_pct", 0.01)))
-                    return {
-                        'strategy_id': self.id,
-                        'code': code,
-                        'dt': kline['dt'],
-                        'direction': 'BUY',
-                        'price': kline['close'],
-                        'qty': self._qty(),
-                        'stop_loss': kline['close'] * (1 - float(self._cfg("stop_loss_pct", 0.01))),
-                        'take_profit': None # Trailing Stop only
-                    }
+        if float(curr["rsi"]) < 35 and float(curr["rsi"]) > float(prev["rsi"]):
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
+            return {'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 'stop_loss': float(curr["close"] - curr["atr"] * 1.5), 'take_profit': float(curr["bb_mid"])}
         return None
 
-# Strategy 07: 跳空交易系统
-class Strategy07(BaseImplementedStrategy):
+class Strategy14(BaseImplementedStrategy):
     def __init__(self):
-        super().__init__("07", "跳空交易系统", trigger_timeframe="15min")
-        self.history = {}
+        super().__init__("14", "14 - 多维共振动量引擎", trigger_timeframe="4h")
 
     def on_bar(self, kline):
-        code = kline['code']
-        self.update_holding_time(code)
-        if code not in self.history: self.history[code] = pd.DataFrame()
-        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(500)
-        df = self.history[code]
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 200: return None
+        df_4h = Indicators.resample(df, "4h")
+        if len(df_4h) < 40: return None
+        df_4h["ema20"] = Indicators.EMA(df_4h["close"], 20)
+        df_4h["rsi"] = Indicators.RSI(df_4h["close"], 14)
+        df_4h["atr"] = Indicators.ATR(df_4h, 14)
+        df_4h = df_4h.dropna().reset_index(drop=True)
+        if len(df_4h) < 2: return None
+        curr = df_4h.iloc[-1]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
+        score = (40 if float(curr["close"]) > float(curr["ema20"]) else 0) + (30 if float(curr["rsi"]) > 52 else 0) + (30 if float(curr["vol"]) > df_4h["vol"].rolling(10).mean().iloc[-1] else 0)
+        if qty > 0:
+            if score < 30: return self.create_exit_signal(kline, qty, "Exit")
+            return None
+        if score >= 75:
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
+            return {'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 'stop_loss': float(curr["close"] - curr["atr"] * 2.5), 'take_profit': None}
+        return None
+
+class Strategy15(BaseImplementedStrategy):
+    def __init__(self):
+        super().__init__("15", "15 - 闪电高频剥头皮 (Scalp)", trigger_timeframe="15min")
+
+    def on_bar(self, kline):
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 60: return None
+        df_15m = Indicators.resample(df, "15min")
+        if len(df_15m) < 20: return None
+        df_15m["ema9"] = Indicators.EMA(df_15m["close"], 9)
+        df_15m["ema21"] = Indicators.EMA(df_15m["close"], 21)
+        df_15m["atr"] = Indicators.ATR(df_15m, 14)
+        df_15m = df_15m.dropna().reset_index(drop=True)
+        if len(df_15m) < 2: return None
+        curr = df_15m.iloc[-1]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
+        if qty > 0:
+            if float(curr["close"]) < float(curr["ema21"]): return self.create_exit_signal(kline, qty, "Exit")
+            return None
+        if float(curr["close"]) > float(curr["ema9"]) > float(curr["ema21"]):
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
+            return {'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 'stop_loss': float(curr["close"] - curr["atr"] * 1.5), 'take_profit': float(curr["close"] + curr["atr"] * 3.0)}
+        return None
+
+class Strategy16(BaseImplementedStrategy):
+    def __init__(self):
+        super().__init__("16", "16 - 机构博弈庄家足迹", trigger_timeframe="4h")
+
+    def on_bar(self, kline):
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 300: return None
+        df_4h = Indicators.resample(df, "4h")
+        if len(df_4h) < 40: return None
+        df_4h["cmf"] = Indicators.CMF(df_4h, 20)
+        df_4h["rsi"] = Indicators.RSI(df_4h["close"], 14)
+        df_4h["atr"] = Indicators.ATR(df_4h, 14)
+        df_4h = df_4h.dropna().reset_index(drop=True)
+        if len(df_4h) < 2: return None
+        curr = df_4h.iloc[-1]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
+        if qty > 0:
+            self.highest_high[code] = max(self.highest_high.get(code, 0.0), float(curr["close"]))
+            if float(curr["close"]) < float(self.highest_high[code] - curr["atr"] * 4.0):
+                return self.create_exit_signal(kline, qty, "Exit")
+            return None
+        if float(curr["cmf"]) > 0.02 or float(curr["rsi"]) < 25:
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
+            return {'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 'stop_loss': float(curr["close"] - curr["atr"] * 2.0), 'take_profit': None}
+        return None
+
+class Strategy17(BaseImplementedStrategy):
+    def __init__(self):
+        super().__init__("17", "17 - BTC 动量突破专业版", trigger_timeframe="15min")
+
+    def on_bar(self, kline):
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 60: return None
+        df_15m = Indicators.resample(df, "15min")
+        if len(df_15m) < 30: return None
+        df_15m["ema10"] = Indicators.EMA(df_15m["close"], 10)
+        df_15m["ema20"] = Indicators.EMA(df_15m["close"], 20)
+        df_15m["rsi"] = Indicators.RSI(df_15m["close"], 14)
+        df_15m["atr"] = Indicators.ATR(df_15m, 14)
+        df_15m = df_15m.dropna().reset_index(drop=True)
+        if len(df_15m) < 2: return None
+        curr, prev = df_15m.iloc[-1], df_15m.iloc[-2]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
+        if qty > 0:
+            self.highest_high[code] = max(self.highest_high.get(code, 0.0), float(curr["close"]))
+            trail_stop = float(self.highest_high[code] - curr["atr"] * 2.5)
+            if float(curr["close"]) < trail_stop or curr["ema10"] < curr["ema20"]:
+                return self.create_exit_signal(kline, qty, "Exit")
+            return None
+        if prev["ema10"] <= prev["ema20"] and curr["ema10"] > curr["ema20"] and float(curr["rsi"]) > 45:
+            buy_qty = self._qty()
+            if buy_qty <= 0: return None
+            return {'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 'stop_loss': float(curr["close"] - curr["atr"] * 2.0), 'take_profit': None}
+        return None
+
+class Strategy18(BaseImplementedStrategy):
+    """
+    18 - 牛旗形态趋势延续 (Bull Flag Pattern) - 优化版
+    根据教学图优化:
+    1. 旗杆: 爆发性拉升, 成交量巨量
+    2. 旗面: 窄幅下降通道 (Lower Highs/Lows), 价格压缩 (Tightness), 成交量萎缩
+    3. 突破: 放量突破旗面上边沿
+    4. 目标: 旗杆高度 (Flagpole height)
+    """
+    def __init__(self):
+        super().__init__("18", "18 - 牛旗形态趋势延续", trigger_timeframe="15min")
+        self.flagpole_height = {}
+        self.flag_top_p = {}
+
+    def on_bar(self, kline):
+        df = self.preprocess(kline)
+        code = kline["code"]
+        if len(df) < 100: return None
+        df_15m = Indicators.resample(df, "15min")
+        if len(df_15m) < 40: return None
         
-        # Use 15min timeframe as per description
-        df_15m = Indicators.resample(df, '15min')
-        if len(df_15m) < int(self._cfg("min_15m_bars", 20)): return None
+        # 形态参数计算
+        df_15m["pct_change_10"] = (df_15m["close"] - df_15m["close"].shift(10)) / df_15m["close"].shift(10)
+        df_15m["vol_ma_20"] = df_15m["vol"].rolling(20).mean()
+        df_15m["tightness"] = Indicators.TIGHTNESS(df_15m["high"], df_15m["low"], 10)
+        df_15m["atr"] = Indicators.ATR(df_15m, 14)
         
         curr = df_15m.iloc[-1]
-        prev = df_15m.iloc[-2]
+        qty = float(self.positions.get(code, 0.0) or 0.0)
         
-        qty = self.positions.get(code, 0)
-        
-        # Trailing Stop Logic (Similar to Dolphin: 1% below High)
+        # 止盈止损逻辑
         if qty > 0:
-            # Check Stop
-            current_price = kline['close']
-            if current_price > self.highest_high.get(code, 0.0):
-                self.highest_high[code] = current_price
-                self.trailing_stop_level[code] = self.highest_high[code] * (1 - float(self._cfg("trailing_stop_pct", 0.01)))
-            
-            if current_price <= self.trailing_stop_level.get(code, 0.0):
-                 return self.create_exit_signal(kline, qty, "Trailing Stop")
+            # 严格按照图示: 旗杆高度目标位
+            target = self.entry_price.get(code, 0.0) + self.flagpole_height.get(code, 0.0)
+            if float(curr["close"]) >= target:
+                return self.create_exit_signal(kline, qty, "Bull Flag Target Reached")
+            # 止损放在旗面最低点下方 (ATR缓冲)
+            if float(curr["close"]) < self.trailing_stop_level.get(code, 0.0):
+                return self.create_exit_signal(kline, qty, "Bull Flag Stop Loss")
             return None
             
-        # Entry Long
-        # Gap Down 0.2% + Yang Line
-        if curr['open'] < prev['close'] * float(self._cfg("gap_down_multiplier", 0.998)):
-            if curr['close'] > curr['open']: # Yang Line
-                self.highest_high[code] = curr['close']
-                self.trailing_stop_level[code] = curr['close'] * (1 - float(self._cfg("trailing_stop_pct", 0.01)))
+        # 1. 检测旗杆 (Flagpole): 爆发拉升 + 放量
+        # 要求 10 根 K 线内涨幅超过 1.5 倍的 ATR 总和, 且成交量是均值的 1.5 倍
+        recent_atr_sum = df_15m["atr"].iloc[-20:-10].sum()
+        
+        # --- 靠谱增强: 检查 1小时大趋势 ---
+        df_1h = Indicators.resample(df, "1h")
+        if len(df_1h) < 20: return None
+        ema_1h_20 = Indicators.EMA(df_1h["close"], 20).iloc[-1]
+        if float(curr["close"]) < ema_1h_20:
+            return None # 1小时级别走势太弱，不打牛旗
+        # -----------------------------
+
+        is_pole = (float(curr["close"] - df_15m["close"].shift(10).iloc[-1]) > recent_atr_sum * 1.5) and (float(curr["vol"]) > float(curr["vol_ma_20"]) * 1.5)
+        
+        # 寻找最近的旗杆作为参考点
+        potential_pole = df_15m[(df_15m["pct_change_10"] > 0.035) & (df_15m["vol"] > df_15m["vol_ma_20"] * 1.3)]
+        if not potential_pole.empty:
+            last_pole = potential_pole.iloc[-1]
+            # 修正: 从 df_15m 中查找对应的 shift 值
+            idx = last_pole.name
+            prev_idx = df_15m.index.get_loc(idx) - 10
+            if prev_idx < 0: return None
+            pole_height = float(last_pole["close"] - df_15m["close"].iloc[prev_idx])
+            
+            # 2. 检测旗面 (Flag): 价格在下降通道中压缩
+            # 取旗杆后的 15 根 K 线分析
+            flag_bars = df_15m.iloc[-12:]
+            
+            # 特征A: 价格压缩 (Tightness 指标低)
+            is_tight = flag_bars["tightness"].min() < 0.025
+            
+            # 特征B: 高点逐渐下移 (下降通道)
+            high_slope = Indicators.SLOPE(flag_bars["high"], 8).iloc[-1]
+            is_descending = high_slope < 0
+            
+            # 特征C: 成交量萎缩
+            vol_dry_up = flag_bars["vol"].mean() < last_pole["vol"] * 0.7
+            
+            # 3. 突破买入: 突破旗面期间的最高点, 且成交量重新放大
+            breakout_level = flag_bars["high"].iloc[:-1].max()
+            if is_tight and is_descending and vol_dry_up and float(curr["close"]) > breakout_level and float(curr["vol"]) > curr["vol_ma_20"]:
+                buy_qty = self._qty()
+                if buy_qty <= 0: return None
+                
+                self.flagpole_height[code] = pole_height
+                self.entry_price[code] = float(curr["close"])
+                # 止损放在旗面低点
+                stop_loss = flag_bars["low"].min() - (curr["atr"] * 0.5)
+                self.trailing_stop_level[code] = stop_loss
+                
                 return {
-                    'strategy_id': self.id,
-                    'code': code,
-                    'dt': kline['dt'],
-                    'direction': 'BUY',
-                    'price': kline['close'],
-                    'qty': self._qty(),
-                    'stop_loss': kline['close'] * (1 - float(self._cfg("stop_loss_pct", 0.01))),
-                    'take_profit': None
+                    'strategy_id': self.id, 'code': code, 'dt': kline['dt'], 
+                    'direction': 'BUY', 'price': float(kline['close']), 'qty': buy_qty, 
+                    'stop_loss': stop_loss, 'take_profit': float(curr["close"] + pole_height)
                 }
-        return None
-
-# Strategy 08: 神奇九转 (Magic 9)
-class Strategy08(BaseImplementedStrategy):
-    def __init__(self):
-        super().__init__("08", "神奇九转", trigger_timeframe="1min")
-        self.history = {}
-
-    def on_bar(self, kline):
-        code = kline['code']
-        self.update_holding_time(code)
-        
-        # History Management
-        if code not in self.history: self.history[code] = pd.DataFrame()
-        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(500)
-        df = self.history[code]
-        
-        # Need enough data: 9 bars + 4 lag = 13 minimum
-        if len(df) < int(self._cfg("min_history_bars", 13)): return None
-        
-        qty = self.positions.get(code, 0)
-        curr_close = kline['close']
-        
-        # --- Exit Logic: Trailing Stop (1%) ---
-        if qty > 0:
-            # Update Highest High
-            if kline['high'] > self.highest_high.get(code, 0.0):
-                self.highest_high[code] = kline['high']
-                self.trailing_stop_level[code] = self.highest_high[code] * (1 - float(self._cfg("trailing_stop_pct", 0.01)))
-            
-            # Check Stop
-            if curr_close <= self.trailing_stop_level.get(code, 0.0):
-                 return self.create_exit_signal(kline, qty, f"Trailing Stop (High {self.highest_high[code]:.2f})")
-            return None
-
-        # --- Entry Logic: Magic 9 (Buy Setup) ---
-        # Condition: 9 consecutive bars where Close > Close[i-4]
-        # Check last 9 bars
-        
-        # Get close prices as numpy array for speed
-        closes = df['close'].values
-        
-        is_setup = True
-        for i in range(1, 10): # 1 to 9 (checking last 9 bars)
-            # Index from end: -i
-            # closes[-i] vs closes[-i-4]
-            if not (closes[-i] > closes[-i-4]):
-                is_setup = False
-                break
-        
-        # Specific Validation from Rules:
-        # 1st (-9) > Prev 4 (-13) (Already checked in loop i=9)
-        # 5th (-5) > 1st (-9)
-        # 9th (-1) > 5th (-5)
-        if is_setup:
-            price_1st = closes[-9]
-            price_5th = closes[-5]
-            price_9th = closes[-1]
-            
-            if price_5th > price_1st and price_9th > price_5th:
-                 # Initialize Trailing Stop state
-                 self.highest_high[code] = curr_close
-                 self.trailing_stop_level[code] = curr_close * (1 - float(self._cfg("trailing_stop_pct", 0.01)))
-                 
-                 return {
-                    'strategy_id': self.id,
-                    'code': code,
-                    'dt': kline['dt'],
-                    'direction': 'BUY',
-                    'price': curr_close,
-                    'qty': self._qty(),
-                    'stop_loss': curr_close * (1 - float(self._cfg("stop_loss_pct", 0.01))),
-                    'take_profit': None
-                }
-            
-        return None
-
-class Strategy09(BaseImplementedStrategy):
-    def __init__(self):
-        super().__init__("09", "箱体降本策略", trigger_timeframe="D")
-        self.history = {}
-        self.strategy_active = {}
-
-    def on_bar(self, kline):
-        code = kline['code']
-        if code not in self.history:
-            self.history[code] = pd.DataFrame()
-        self.history[code] = pd.concat([self.history[code], pd.DataFrame([kline])], ignore_index=True).tail(60000)
-        df = self.history[code]
-        box_period = int(self._cfg("box_period", 240))
-        rsi_period = int(self._cfg("rsi_period", 14))
-        if len(df) < max(800, box_period * 3):
-            return None
-        df_d = Indicators.resample(df, 'D')
-        if len(df_d) < box_period + 1:
-            return None
-        close = df_d['close']
-        high = df_d['high']
-        low = df_d['low']
-        rsi_series = Indicators.RSI(close, rsi_period)
-        c = float(close.iloc[-1])
-        top = float(high.iloc[-(box_period + 1):-1].max())
-        bot = float(low.iloc[-(box_period + 1):-1].min())
-        if top <= bot:
-            return None
-        box_h = top - bot
-        break_pct = float(self._cfg("break_pct", 0.05))
-        rsi_oversold = float(self._cfg("rsi_oversold", 30))
-        rsi_overbought = float(self._cfg("rsi_overbought", 70))
-        base_build_rsi = float(self._cfg("base_build_rsi", 35))
-        buy_zone_ratio = float(self._cfg("buy_zone_ratio", 0.15))
-        sell_zone_ratio = float(self._cfg("sell_zone_ratio", 0.15))
-        base_qty = int(self._cfg("base_order_qty", max(100, self._qty())))
-        dynamic_qty = int(self._cfg("dynamic_order_qty", max(100, int(base_qty * 0.35))))
-        max_dynamic_qty = int(self._cfg("max_dynamic_qty", dynamic_qty * 3))
-        stop_loss_pct = float(self._cfg("stop_loss_pct", 0.05))
-        if code not in self.strategy_active:
-            self.strategy_active[code] = True
-        if not self.strategy_active.get(code, True):
-            return None
-        qty = int(self.positions.get(code, 0))
-        curr_rsi = float(rsi_series.iloc[-1])
-        if c < bot * (1 - break_pct):
-            self.strategy_active[code] = False
-            if qty > 0:
-                return self.create_exit_signal(kline, qty, "Box Breakdown Exit")
-            return None
-        if c > top * (1 + break_pct):
-            self.strategy_active[code] = False
-            return None
-        mid = (top + bot) / 2.0
-        if qty < base_qty:
-            if bot <= c <= mid and curr_rsi < base_build_rsi:
-                buy_qty = max(0, base_qty - qty)
-                if buy_qty > 0:
-                    return {
-                        'strategy_id': self.id,
-                        'code': code,
-                        'dt': kline['dt'],
-                        'direction': 'BUY',
-                        'price': c,
-                        'qty': buy_qty,
-                        'stop_loss': c * (1 - stop_loss_pct),
-                        'take_profit': None
-                    }
-            return None
-        if bot <= c <= bot + box_h * buy_zone_ratio and curr_rsi <= rsi_oversold:
-            cap_qty = max(0, base_qty + max_dynamic_qty - qty)
-            buy_qty = min(dynamic_qty, cap_qty)
-            if buy_qty > 0:
-                return {
-                    'strategy_id': self.id,
-                    'code': code,
-                    'dt': kline['dt'],
-                    'direction': 'BUY',
-                    'price': c,
-                    'qty': buy_qty,
-                    'stop_loss': c * (1 - stop_loss_pct),
-                    'take_profit': None
-                }
-        if top - box_h * sell_zone_ratio <= c <= top and curr_rsi >= rsi_overbought:
-            sell_qty = min(dynamic_qty, max(0, qty - base_qty))
-            if sell_qty > 0:
-                return self.create_exit_signal(kline, sell_qty, "Box Dynamic Rebalance")
         return None

@@ -4,7 +4,9 @@ from src.ministries.hu_bu_revenue import HuBuRevenue
 from src.ministries.bing_bu_war import BingBuWar
 from src.ministries.xing_bu_justice import XingBuJustice
 from src.utils.constants import *
+from src.utils.runtime_params import get_value
 import pandas as pd
+import math
 
 class ShangshuSheng:
     """
@@ -22,6 +24,23 @@ class ShangshuSheng:
             return ""
         return x.strftime("%Y-%m-%d")
 
+    def _is_crypto(self):
+        return str(get_value("system.asset_class", "equity")).strip().lower() == "crypto"
+
+    def _normalize_qty(self, qty):
+        raw = float(qty or 0.0)
+        if self._is_crypto():
+            return round(raw, 8)
+        return int(raw)
+
+    def _round_crypto_qty(self, qty, qty_step):
+        raw = float(qty or 0.0)
+        step = float(qty_step or 0.0)
+        if step <= 0:
+            return round(raw, 8)
+        stepped = math.floor((raw / step) + 1e-9) * step
+        return round(stepped, 8)
+
     def _ensure_lots(self, pos):
         lots = pos.get('lots')
         if isinstance(lots, list):
@@ -29,7 +48,7 @@ class ShangshuSheng:
             for item in lots:
                 if not isinstance(item, dict):
                     continue
-                q = int(item.get('qty', 0) or 0)
+                q = self._normalize_qty(item.get('qty', 0))
                 if q <= 0:
                     continue
                 normalized.append({
@@ -39,7 +58,7 @@ class ShangshuSheng:
                 })
             pos['lots'] = normalized
             return pos['lots']
-        legacy_qty = int(pos.get('qty', 0) or 0)
+        legacy_qty = self._normalize_qty(pos.get('qty', 0) or 0)
         if legacy_qty <= 0:
             pos['lots'] = []
             return pos['lots']
@@ -52,27 +71,27 @@ class ShangshuSheng:
 
     def _rebuild_position_from_lots(self, pos, mark_price):
         lots = self._ensure_lots(pos)
-        total_qty = sum(int(x.get('qty', 0) or 0) for x in lots)
+        total_qty = sum(float(x.get('qty', 0) or 0) for x in lots)
         if total_qty <= 0:
             pos['qty'] = 0
             pos['avg_price'] = 0.0
             pos['market_value'] = 0.0
             pos['last_buy_day'] = ''
             return
-        total_cost = sum(float(x.get('unit_cost', 0.0) or 0.0) * int(x.get('qty', 0) or 0) for x in lots)
-        pos['qty'] = total_qty
+        total_cost = sum(float(x.get('unit_cost', 0.0) or 0.0) * float(x.get('qty', 0) or 0) for x in lots)
+        pos['qty'] = self._normalize_qty(total_qty)
         pos['avg_price'] = total_cost / total_qty
-        pos['market_value'] = float(mark_price) * total_qty
+        pos['market_value'] = float(mark_price) * float(pos['qty'])
         buy_days = sorted([str(x.get('buy_day', '')).strip() for x in lots if str(x.get('buy_day', '')).strip()])
         pos['last_buy_day'] = buy_days[-1] if buy_days else ''
 
     def _sellable_qty_t1(self, pos, curr_day):
         lots = self._ensure_lots(pos)
-        return sum(int(x.get('qty', 0) or 0) for x in lots if str(x.get('buy_day', '')).strip() != str(curr_day or '').strip())
+        return sum(float(x.get('qty', 0) or 0) for x in lots if str(x.get('buy_day', '')).strip() != str(curr_day or '').strip())
 
     def _consume_lots_fifo(self, pos, sell_qty, curr_day):
         lots = self._ensure_lots(pos)
-        need = int(sell_qty or 0)
+        need = float(sell_qty or 0)
         consumed = []
         for lot in lots:
             if need <= 0:
@@ -80,15 +99,15 @@ class ShangshuSheng:
             lot_day = str(lot.get('buy_day', '')).strip()
             if lot_day == str(curr_day or '').strip():
                 continue
-            can_take = min(int(lot.get('qty', 0) or 0), need)
+            can_take = min(float(lot.get('qty', 0) or 0), need)
             if can_take <= 0:
                 continue
-            lot['qty'] = int(lot.get('qty', 0) or 0) - can_take
+            lot['qty'] = self._normalize_qty(float(lot.get('qty', 0) or 0) - can_take)
             consumed.append({'qty': can_take, 'unit_cost': float(lot.get('unit_cost', 0.0) or 0.0)})
             need -= can_take
         if need > 0:
             return None
-        pos['lots'] = [x for x in lots if int(x.get('qty', 0) or 0) > 0]
+        pos['lots'] = [x for x in lots if float(x.get('qty', 0) or 0) > 0]
         return consumed
         
     def execute_order(self, strategy_id, signal, kline, hu_bu_account=None):
@@ -97,16 +116,25 @@ class ShangshuSheng:
         """
         direction = str(signal['direction']).upper()
         code = signal['code']
-        qty = int(float(signal['qty']))
+        asset_class = str(get_value("system.asset_class", "equity")).strip().lower()
+        qty = float(signal['qty'])
         hu_bu = hu_bu_account if hu_bu_account is not None else self.hu_bu
         lot_size = 100
+        qty_step = float(get_value("trading_rules.qty_step", 0.0001))
+        min_order_qty = float(get_value("trading_rules.min_order_qty", qty_step))
         if direction not in {'BUY', 'SELL'}:
             self.xing_bu.record_rejection(strategy_id, 'EXEC_DIR_INVALID', f"Invalid direction: {direction}", kline['dt'])
             return False
         if qty <= 0:
             self.xing_bu.record_rejection(strategy_id, 'EXEC_QTY_INVALID', f"Invalid qty: {qty}", kline['dt'])
             return False
-        if direction == 'BUY':
+        if asset_class == 'crypto':
+            qty = self._round_crypto_qty(qty, qty_step)
+            if qty < min_order_qty:
+                self.xing_bu.record_rejection(strategy_id, 'EXEC_QTY_INVALID', f"Invalid crypto qty: {qty}", kline['dt'])
+                return False
+        elif direction == 'BUY':
+            qty = int(qty)
             qty = (qty // lot_size) * lot_size
             if qty < lot_size:
                 self.xing_bu.record_rejection(strategy_id, 'EXEC_LOT_BLOCK', f"BUY qty must be >= {lot_size} and lot-sized", kline['dt'])
@@ -127,20 +155,28 @@ class ShangshuSheng:
             amount_probe = fill_price * qty
             cost_probe, _, _, _ = hu_bu.calculate_cost(amount_probe, direction, fill_price, qty)
             if amount_probe + cost_probe > cash_available:
-                lo, hi = 0, qty // lot_size
-                while lo < hi:
-                    mid = (lo + hi + 1) // 2
-                    mid_qty = mid * lot_size
-                    mid_amount = fill_price * mid_qty
-                    mid_cost, _, _, _ = hu_bu.calculate_cost(mid_amount, direction, fill_price, mid_qty)
-                    if mid_amount + mid_cost <= cash_available:
-                        lo = mid
-                    else:
-                        hi = mid - 1
-                qty = lo * lot_size
-                if qty < lot_size:
-                    self.xing_bu.record_rejection(strategy_id, 'EXEC_NO_CASH', "Insufficient cash after fee/slippage", kline['dt'])
-                    return False
+                if asset_class == 'crypto':
+                    est_rate = float(get_value("trading_cost.commission_rate", COMMISSION_RATE))
+                    raw_qty = cash_available / (fill_price * (1 + est_rate + 1e-9))
+                    qty = self._round_crypto_qty(raw_qty, qty_step)
+                    if qty < min_order_qty:
+                        self.xing_bu.record_rejection(strategy_id, 'EXEC_NO_CASH', "Insufficient cash after fee/slippage", kline['dt'])
+                        return False
+                else:
+                    lo, hi = 0, qty // lot_size
+                    while lo < hi:
+                        mid = (lo + hi + 1) // 2
+                        mid_qty = mid * lot_size
+                        mid_amount = fill_price * mid_qty
+                        mid_cost, _, _, _ = hu_bu.calculate_cost(mid_amount, direction, fill_price, mid_qty)
+                        if mid_amount + mid_cost <= cash_available:
+                            lo = mid
+                        else:
+                            hi = mid - 1
+                    qty = lo * lot_size
+                    if qty < lot_size:
+                        self.xing_bu.record_rejection(strategy_id, 'EXEC_NO_CASH', "Insufficient cash after fee/slippage", kline['dt'])
+                        return False
         amount = fill_price * qty
         cost, comm, stamp, transfer = hu_bu.calculate_cost(amount, direction, fill_price, qty)
         
@@ -188,28 +224,42 @@ class ShangshuSheng:
                  return False
             
             pos = self.positions[strategy_id][code]
-            pos_qty = int(pos.get('qty', 0) or 0)
+            pos_qty = float(pos.get('qty', 0) or 0)
             if qty > pos_qty:
                  self.xing_bu.record_violation(strategy_id, 'SELL_OVER_QTY', f"Sell {qty} > Holding {pos_qty}", kline['dt'])
                  return False
-            if qty % lot_size != 0 and qty != pos_qty:
+            if asset_class != 'crypto' and qty % lot_size != 0 and qty != pos_qty:
                 self.xing_bu.record_rejection(strategy_id, 'EXEC_LOT_BLOCK', f"SELL qty must be lot-sized or equal to full position ({pos_qty})", kline['dt'])
                 return False
             curr_day = self._trade_day(kline.get('dt'))
-            sellable_qty = self._sellable_qty_t1(pos, curr_day)
+            sellable_qty = pos_qty if asset_class == 'crypto' else self._sellable_qty_t1(pos, curr_day)
             if qty > sellable_qty:
                 self.xing_bu.record_rejection(strategy_id, 'EXEC_T1_BLOCK', f"T+1 block: {code} sellable {sellable_qty} < request {qty}", kline['dt'])
                 return False
-            consumed = self._consume_lots_fifo(pos, qty, curr_day)
+            consumed = (
+                [{'qty': qty, 'unit_cost': float(pos.get('avg_price', 0.0) or 0.0)}]
+                if asset_class == 'crypto'
+                else self._consume_lots_fifo(pos, qty, curr_day)
+            )
             if consumed is None:
                 self.xing_bu.record_rejection(strategy_id, 'EXEC_T1_BLOCK', f"T+1 block: {code} insufficient sellable lots", kline['dt'])
                 return False
-            cost_basis = sum(float(x.get('unit_cost', 0.0) or 0.0) * int(x.get('qty', 0) or 0) for x in consumed)
+            cost_basis = sum(float(x.get('unit_cost', 0.0) or 0.0) * float(x.get('qty', 0) or 0) for x in consumed)
             
             # Calculate Realized PnL
             pnl = (fill_price * qty) - cost_basis - cost
-            self._rebuild_position_from_lots(pos, fill_price)
-            if int(pos.get('qty', 0) or 0) == 0:
+            if asset_class == 'crypto':
+                remain_qty = round(max(0.0, pos_qty - qty), 8)
+                if remain_qty <= 0:
+                    pos['qty'] = 0.0
+                    pos['avg_price'] = 0.0
+                    pos['market_value'] = 0.0
+                else:
+                    pos['qty'] = remain_qty
+                    pos['market_value'] = remain_qty * fill_price
+            else:
+                self._rebuild_position_from_lots(pos, fill_price)
+            if float(pos.get('qty', 0) or 0) <= 0:
                 del self.positions[strategy_id][code]
 
             hu_bu.record_transaction(

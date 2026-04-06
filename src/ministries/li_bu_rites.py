@@ -568,11 +568,13 @@ class LiBuRites:
             reason = str(t.get("reason", "") or "")
             if reason == "FORCE_CLOSE_END":
                 force_close_count += 1
+            qty_raw = float(t.get("quantity", 0) or 0.0)
+            qty_out = int(round(qty_raw)) if abs(qty_raw - round(qty_raw)) < 1e-8 else round(qty_raw, 8)
             trade_details.append({
                 "dt": str(t.get("dt", "")),
                 "direction": str(t.get("direction", "")),
                 "price": float(t.get("price", 0.0) or 0.0),
-                "quantity": int(t.get("quantity", 0) or 0),
+                "quantity": qty_out,
                 "amount": float(t.get("amount", 0.0) or 0.0),
                 "cost": float(t.get("cost", 0.0) or 0.0),
                 "pnl": float(t.get("pnl", 0.0) or 0.0),

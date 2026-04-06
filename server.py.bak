@@ -18,7 +18,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.lines as mlines
 from matplotlib import font_manager
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,8 +47,6 @@ from src.utils.akshare_provider import AkshareProvider
 from src.utils.binance_provider import BinanceProvider
 from src.utils.crypto_market_analyzer import CryptoMarketAnalyzer
 from src.utils.mysql_provider import MysqlProvider
-import subprocess
-import signal
 from src.utils.postgres_provider import PostgresProvider
 from src.utils.history_sync_service import HistoryDiffSyncService, TABLE_INTERVAL_MAP, DEFAULT_SYNC_TABLES
 from src.utils.backtest_baseline import apply_backtest_baseline
@@ -973,7 +971,7 @@ async def _crypto_signal_monitor_loop():
                 await asyncio.sleep(60)
                 continue
             
-            symbols = cfg.get("signal_monitor.symbols", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "PEPEUSDT", "ORDIUSDT"])
+            symbols = cfg.get("signal_monitor.symbols", ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
             symbols = [str(x).strip().upper() for x in symbols if str(x).strip()]
             if not symbols:
                 symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
@@ -1646,10 +1644,6 @@ async def get_report_page():
 @app.get("/realtime")
 async def get_realtime_page():
     return HTMLResponse(content=open("realtime.html", "r", encoding="utf-8").read())
-
-@app.get("/modern")
-async def get_modern_page():
-    return HTMLResponse(content=open("modern_console.html", "r", encoding="utf-8").read())
 
 
 @app.get("/logo.png")
@@ -2948,113 +2942,6 @@ async def api_backtest_kline_data(stock: str, start: str, end: str):
         return {"status": "error", "msg": str(e)}
 
 
-
-@app.get("/api/crypto/kline_data")
-async def api_crypto_kline_data(symbol: str, interval: str = "1h", limit: int = 200):
-    try:
-        symbol = str(symbol or "").upper().strip()
-        provider = _select_provider()
-        now = datetime.now()
-        if interval == "1d":
-            start_dt = now - timedelta(days=limit)
-        elif interval == "4h":
-            start_dt = now - timedelta(hours=limit * 4)
-        else: # default 1h
-            start_dt = now - timedelta(hours=limit)
-        df = await asyncio.to_thread(provider.fetch_kline_data, symbol, start_dt, now, interval)
-        if df is None or df.empty:
-            return {"status": "error", "msg": "no data"}
-        df = df.sort_values("dt")
-        candles = []
-        volumes = []
-        for _, r in df.iterrows():
-            t = int(pd.to_datetime(r["dt"]).timestamp())
-            o, h, l, c = float(r["open"]), float(r["high"]), float(r["low"]), float(r["close"])
-            candles.append({"time": t, "open": o, "high": h, "low": l, "close": c})
-            volumes.append({"time": t, "value": float(r["vol"]), "color": "#ef4444" if c >= o else "#22c55e"})
-        snapshot = crypto_last_snapshot.get(symbol, {})
-        markers = []
-        price_lines = []
-        forecast_candles = []
-        
-        if snapshot:
-            action = str(snapshot.get("action", "") or "观望")
-            price = snapshot.get("price")
-            plan = snapshot.get("trade_plan", {})
-            
-            # Prediction/Forecast logic
-            if candles:
-                last_t = candles[-1]["time"]
-                last_c = candles[-1]["close"]
-                is_buy = action == "做多"
-                
-                # If no signal, use a neutral drift or last 24h trend
-                if action not in {"做多", "做空"}:
-                    # Simple: drift towards a "mean" or just flat with noise
-                    tp = last_c * (1.005 if last_c > candles[0]["close"] else 0.995)
-                    step = (tp - last_c) / 8
-                else:
-                    tp = float(plan.get("take_profit_1") or (last_c * 1.02 if is_buy else last_c * 0.98))
-                    step = (tp - last_c) / 5
-                
-                interval_sec = 3600 # default 1h
-                if interval == "4h": interval_sec = 3600 * 4
-                elif interval == "1d": interval_sec = 3600 * 24
-                
-                curr_p = last_c
-                num_bars = 8 if action not in {"做多", "做空"} else 5
-                for i in range(1, num_bars + 1):
-                    next_t = last_t + (i * interval_sec)
-                    next_c = curr_p + step + (np.random.randn() * abs(step) * 0.2)
-                    low = min(curr_p, next_c) - abs(step)*0.3
-                    high = max(curr_p, next_c) + abs(step)*0.3
-                    forecast_candles.append({
-                        "time": next_t,
-                        "open": curr_p,
-                        "high": high,
-                        "low": low,
-                        "close": next_c
-                    })
-                    curr_p = next_c
-
-            if action in {"做多", "做空"}:
-                is_buy = action == "做多"
-                markers.append({
-                    "time": candles[-1]["time"],
-                    "position": "belowBar" if is_buy else "aboveBar",
-                    "shape": "arrowUp" if is_buy else "arrowDown",
-                    "color": "#10b981" if is_buy else "#f43f5e",
-                    "text": f"{action} @ {price}",
-                    "size": 2
-                })
-                if plan.get("entry_zone"):
-                    try:
-                        entry_val = float(str(plan["entry_zone"]).split("-")[0])
-                        price_lines.append({"price": entry_val, "color": "#3b82f6", "label": "入场区域"})
-                    except: pass
-                if plan.get("stop_loss"):
-                    try:
-                        price_lines.append({"price": float(plan["stop_loss"]), "color": "#f43f5e", "label": "止损"})
-                    except: pass
-                if plan.get("take_profit_1"):
-                    try:
-                        price_lines.append({"price": float(plan["take_profit_1"]), "color": "#10b981", "label": "止盈1"})
-                    except: pass
-        return {
-            "status": "success",
-            "symbol": symbol,
-            "candles": candles,
-            "volumes": volumes,
-            "markers": markers,
-            "price_lines": price_lines,
-            "forecast_candles": forecast_candles
-        }
-    except Exception as e:
-        logger.error(f"/api/crypto/kline_data failed: {e}", exc_info=True)
-        return {"status": "error", "msg": str(e)}
-
-
-
 @app.get("/api/backtest/kline_chart")
 async def api_backtest_kline_chart(stock: str, start: str, end: str):
     try:
@@ -3982,60 +3869,6 @@ async def shutdown_event():
         history_sync_scheduler_task.cancel()
     if crypto_signal_monitor_task and not crypto_signal_monitor_task.done():
         crypto_signal_monitor_task.cancel()
-
-@app.post("/api/crypto/launch")
-async def api_crypto_launch_live():
-    """Launch the live manager process"""
-    pid_file = "live.pid"
-    if os.path.exists(pid_file):
-        try:
-            with open(pid_file, "r") as f:
-                old_pid = int(f.read().strip())
-            os.kill(old_pid, signal.SIGTERM)
-            logger.info(f"Killed old live process {old_pid}")
-        except:
-            pass
-    
-    # Run run_live.py in background
-    cmd = [sys.executable, "-u", "run_live.py"]
-    with open("live.log", "w") as log:
-        p = subprocess.Popen(cmd, stdout=log, stderr=log, preexec_fn=os.setsid)
-    
-    with open(pid_file, "w") as f:
-        f.write(str(p.pid))
-        
-    logger.info(f"Launched new live process {p.pid}")
-    return {"status": "success", "pid": p.pid, "msg": "Elite Robot Launched."}
-
-@app.post("/api/crypto/stop")
-async def api_crypto_stop_live():
-    """Stop the live manager process"""
-    pid_file = "live.pid"
-    if os.path.exists(pid_file):
-        try:
-            with open(pid_file, "r") as f:
-                pid = int(f.read().strip())
-            os.kill(pid, signal.SIGTERM)
-            os.remove(pid_file)
-            logger.info(f"Stopped live process {pid}")
-            return {"status": "success", "msg": "Elite Robot Stopped."}
-        except Exception as e:
-            return {"status": "error", "msg": str(e)}
-    return {"status": "info", "msg": "No live process running."}
-
-@app.get("/api/crypto/evolution")
-async def api_crypto_get_evolution():
-    """Get the latest performance audit results"""
-    try:
-        from src.utils.performance_auditor import PerformanceAuditor
-        auditor = PerformanceAuditor()
-        res = auditor.audit_last_24h()
-        if isinstance(res, tuple):
-            report, proposals = res
-            return {"status": "success", "report": report, "proposals": proposals}
-        return {"status": "info", "msg": res}
-    except Exception as e:
-        return {"status": "error", "msg": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

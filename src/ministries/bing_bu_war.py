@@ -83,13 +83,14 @@ class BingBuWar:
         # Slippage is applied.
         
         direction = str(order.get('direction', '')).upper()
+        asset_class = str(get_value("system.asset_class", "equity")).strip().lower()
         if direction not in {'BUY', 'SELL'}:
             return False, 0.0
         if self._is_suspended_or_invalid(kline):
             return False, 0.0
-        if direction == 'BUY' and self._is_limit_up(kline):
+        if asset_class != "crypto" and direction == 'BUY' and self._is_limit_up(kline):
             return False, 0.0
-        if direction == 'SELL' and self._is_limit_down(kline):
+        if asset_class != "crypto" and direction == 'SELL' and self._is_limit_down(kline):
             return False, 0.0
         price = self._to_float(kline.get('open', 0.0))
         if price <= 0:

@@ -1,5 +1,6 @@
 from src.utils.tushare_provider import TushareProvider
 from src.utils.akshare_provider import AkshareProvider
+from src.utils.binance_provider import BinanceProvider
 from src.utils.data_provider import DataProvider
 from src.utils.mysql_provider import MysqlProvider
 from src.utils.postgres_provider import PostgresProvider
@@ -11,7 +12,7 @@ class DataFactory:
     统一数据源工厂类 (DataFactory)
     
     使用说明:
-    1. 实例化 DataFactory，指定数据源类型 ('tushare', 'akshare', 'mysql', 'default')。
+    1. 实例化 DataFactory，指定数据源类型 ('tushare', 'akshare', 'binance', 'mysql', 'default')。
     2. 如果使用 tushare，需要提供 token。
     3. 调用 get_provider() 获取具体的 Provider 实例。
     4. 使用 fetch_minute_data() 或 get_latest_bar() 获取数据。
@@ -37,6 +38,8 @@ class DataFactory:
             
         elif self.source == 'akshare':
             return AkshareProvider()
+        elif self.source == 'binance':
+            return BinanceProvider()
         elif self.source == 'mysql':
             return MysqlProvider()
         elif self.source == 'postgresql':
@@ -49,4 +52,4 @@ class DataFactory:
         return self.provider
 
 # 导出工具类，方便外部直接 import 使用
-__all__ = ['DataFactory', 'TushareProvider', 'AkshareProvider', 'MysqlProvider', 'PostgresProvider', 'DataProvider']
+__all__ = ['DataFactory', 'TushareProvider', 'AkshareProvider', 'BinanceProvider', 'MysqlProvider', 'PostgresProvider', 'DataProvider']

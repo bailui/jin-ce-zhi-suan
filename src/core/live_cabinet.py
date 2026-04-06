@@ -5,6 +5,10 @@ import json
 import pandas as pd
 from datetime import datetime, timedelta
 from src.utils.data_provider import DataProvider
+from src.utils.binance_provider import BinanceProvider
+from src.utils.akshare_provider import AkshareProvider
+from src.utils.tushare_provider import TushareProvider
+from src.utils.mysql_provider import MysqlProvider
 from src.core.crown_prince import CrownPrince
 from src.core.zhongshu_sheng import ZhongshuSheng
 from src.core.menxia_sheng import MenxiaSheng
@@ -38,6 +42,9 @@ class LiveCabinet:
         elif self.provider_type == 'akshare':
             self.provider = AkshareProvider()
             print("🌐 Data Source: Akshare (Free)")
+        elif self.provider_type == 'binance':
+            self.provider = BinanceProvider()
+            print("🌐 Data Source: Binance Public API")
         elif self.provider_type == 'mysql':
             self.provider = MysqlProvider()
             print("🌐 Data Source: MySQL")
@@ -665,7 +672,9 @@ class LiveCabinet:
             return True
         last_bar = df.iloc[-1]
         for strategy in strategies_to_warm:
-            strategy.history[self.stock_code] = df.copy()
+            if not hasattr(strategy, 'data_history'):
+                strategy.data_history = {}
+            strategy.data_history[self.stock_code] = df.iloc[:-1].copy()
             try:
                 strategy.on_bar(last_bar)
             except Exception as e:

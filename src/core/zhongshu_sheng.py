@@ -1,6 +1,7 @@
 # src/core/zhongshu_sheng.py
 
 from src.utils.runtime_params import get_value
+import math
 
 class ZhongshuSheng:
     """
@@ -40,17 +41,18 @@ class ZhongshuSheng:
             if signal:
                 if "qty" not in signal or signal.get("qty") is None:
                     signal["qty"] = self._resolve_fallback_qty(strategy)
-                qty = int(float(signal.get("qty", 0)))
+                qty = float(signal.get("qty", 0) or 0)
                 if qty <= 0:
                     continue
-                signal["qty"] = qty
+                asset_class = str(get_value("system.asset_class", "equity")).strip().lower()
+                signal["qty"] = round(qty, 8) if asset_class == "crypto" else int(qty)
                 signals.append(signal)
         return signals
 
     def _resolve_fallback_qty(self, strategy):
         if hasattr(strategy, "_qty"):
             try:
-                return int(float(strategy._qty()))
+                return float(strategy._qty())
             except Exception:
                 pass
         mode = str(get_value("strategy_params.common.order_qty_mode", "fixed")).strip().lower()
@@ -63,9 +65,16 @@ class ZhongshuSheng:
             pct = max(0.0, min(1.0, pct))
             if cash <= 0 or price <= 0 or pct <= 0:
                 return 0
+            asset_class = str(get_value("system.asset_class", "equity")).strip().lower()
+            if asset_class == "crypto":
+                step = float(get_value("trading_rules.qty_step", 0.0001))
+                raw_qty = (cash * pct) / price
+                return round(math.floor((raw_qty / step) + 1e-9) * step, 8) if step > 0 else round(raw_qty, 8)
             raw_qty = int((cash * pct) // price)
             return int((raw_qty // 100) * 100)
-        return int(float(get_value("strategy_params.common.order_qty", 1000)))
+        qty = float(get_value("strategy_params.common.order_qty", 1000))
+        asset_class = str(get_value("system.asset_class", "equity")).strip().lower()
+        return round(qty, 8) if asset_class == "crypto" else int(qty)
 
     def update_strategy_state(self, strategy_id, code, position_qty):
         """

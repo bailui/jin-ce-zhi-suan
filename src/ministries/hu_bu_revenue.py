@@ -26,7 +26,8 @@ class HuBuRevenue:
         commission_rate = float(get_value("trading_cost.commission_rate", COMMISSION_RATE))
         stamp_duty_rate = float(get_value("trading_cost.stamp_duty", STAMP_DUTY))
         transfer_fee_rate = float(get_value("trading_cost.transfer_fee", TRANSFER_FEE))
-        commission = max(min_commission, amount * commission_rate)
+        asset_class = str(get_value("system.asset_class", "equity")).strip().lower()
+        commission = amount * commission_rate if asset_class == "crypto" else max(min_commission, amount * commission_rate)
         
         # Stamp Duty: 0.1% on SELL only
         stamp_duty = 0.0

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>金策智算 智能交易决策控制台</title>
+    <title>白鹿智算 · 数字资产决策引擎</title>
     
     <!-- Tailwind CSS v3 -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -51,7 +51,7 @@
         body {
             background-color: #0b1120;
             color: #e2e8f0;
-            overflow: hidden; /* App-like feel */
+            overflow: hidden;
         }
         
         /* Strategy Switch Overlay */
@@ -206,7 +206,7 @@
             <button onclick="closeBacktest()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
             <a href="/report" target="_blank" class="absolute top-4 right-14 text-xs bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded">回测报告页</a>
             <h2 class="text-2xl font-bold text-white mb-1 border-b border-slate-700 pb-2"><i class="fa-solid fa-chart-line text-trading-blue mr-2"></i>回测绩效报告</h2>
-            <div class="text-xs text-slate-400 mb-4 font-mono">标的代码: <span id="bt-code" class="text-white">--</span> | 回测区间: <span id="bt-period" class="text-white">--</span></div>
+            <div class="text-xs text-slate-400 mb-4 font-mono">交易对: <span id="bt-code" class="text-white">--</span> | 回测区间: <span id="bt-period" class="text-white">--</span></div>
             
             <div class="grid grid-cols-4 gap-4 mb-6">
                 <div class="bg-slate-800/50 p-3 rounded border border-slate-700">
@@ -265,16 +265,14 @@
                 <span class="text-xs text-slate-400">查看策略</span>
                 <select id="strategy-doc-selector" onchange="renderStrategyDoc(this.value)" class="bg-slate-800 border border-slate-600 text-white py-1 px-2 rounded text-xs">
                     <option value="all">全部策略总览</option>
-                    <option value="00">00 长期持有一次买入</option>
-                    <option value="01">01 三周期共振波段</option>
-                    <option value="02">02 短线弱转强烂板</option>
-                    <option value="03">03 ETF行业轮动</option>
-                    <option value="04">04 龙头首阴反包</option>
-                    <option value="05">05 3N法则主升浪</option>
-                    <option value="06">06 海豚交易法</option>
-                    <option value="07">07 跳空交易系统</option>
-                    <option value="08">08 神奇九转</option>
-                    <option value="09">09 箱体降本策略</option>
+                    <option value="00">00 长期持有策略</option>
+                    <option value="10">10 均线引力趋势追踪</option>
+                    <option value="11">11 唐奇安通道破位捕捉</option>
+                    <option value="12">12 ATR 波动率自适应</option>
+                    <option value="13">13 布林极限均值回归</option>
+                    <option value="14">14 多维共振动量引擎</option>
+                    <option value="15">15 闪电高频剥头皮 (Scalp)</option>
+                    <option value="16">16 机构博弈庄家足迹</option>
                 </select>
             </div>
             <div id="strategy-doc-content" class="space-y-3"></div>
@@ -286,7 +284,7 @@
         <div class="flex items-center gap-4">
             <img src="/logo.png" alt="logo" class="h-10 w-10 object-contain rounded" />
             <div>
-                <h1 class="font-bold text-lg tracking-wide text-white">金策智算 <span class="text-trading-blue text-xs font-mono bg-blue-900/30 px-2 py-0.5 rounded">智能投研决策系统</span></h1>
+                <h1 class="font-bold text-lg tracking-wide text-white">白鹿智算 <span class="text-trading-blue text-xs font-mono bg-blue-900/30 px-2 py-0.5 rounded">数字资产决策引擎</span></h1>
                 <div class="text-[10px] text-red-500 font-mono tracking-wider">历史回测数据不代表未来收益，投资有风险</div>
             </div>
         </div>
@@ -340,6 +338,12 @@
             <button onclick="openStrategyManager()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded text-xs transition-all border border-indigo-500">
                 <i class="fa-solid fa-chess-knight"></i> 策略管理器
             </button>
+            <a href="/modern" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-xs transition-all border border-blue-500">
+                <i class="fa-solid fa-desktop"></i> 现代版
+            </a>
+            <a href="/realtime" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded text-xs transition-all border border-cyan-500">
+                <i class="fa-solid fa-satellite-dish"></i> 实时导航
+            </a>
             <a href="/report" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded text-xs transition-all border border-indigo-500">
                 <i class="fa-solid fa-file-lines"></i> 打开报告
             </a>
@@ -348,12 +352,12 @@
     </header>
 
     <!-- Main Layout -->
-    <main class="flex-1 flex overflow-hidden p-4 gap-4 relative">
+    <main class="flex-1 min-h-0 flex overflow-hidden p-4 gap-4 relative">
         <!-- Scanline Effect -->
         <div class="scan-line"></div>
 
         <!-- LEFT: Three Departments (Decision Hub) -->
-        <section class="w-1/4 flex flex-col gap-4">
+        <section class="w-1/4 min-h-0 flex flex-col gap-4 overflow-y-auto pr-1">
             <!-- Header -->
             <div class="flex items-center gap-2 text-trading-dim text-xs font-bold uppercase tracking-widest border-b border-slate-700 pb-2">
                 <i class="fa-solid fa-landmark"></i> 智能决策中枢 (Central Hub)
@@ -367,7 +371,7 @@
             <div class="glass-panel p-4 rounded-lg flex-1 flex flex-col relative overflow-hidden group hover:border-trading-blue/30 transition-colors">
                 <div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity"><i class="fa-solid fa-scroll text-6xl"></i></div>
                 <div class="flex justify-between items-start mb-2">
-                    <h3 class="font-bold text-trading-blue text-sm">中书省 - 策略研究中心</h3>
+                    <h3 class="font-bold text-trading-blue text-sm">策略决策中心 (Strategy Hub)</h3>
                     <div class="flex items-center gap-2">
                         <span class="status-dot bg-trading-green animate-pulse" id="status-zhongshu"></span>
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-700/50">真实联动</span>
@@ -384,7 +388,7 @@
             <div class="glass-panel p-4 rounded-lg flex-1 flex flex-col relative overflow-hidden group hover:border-trading-yellow/30 transition-colors">
                 <div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity"><i class="fa-solid fa-scale-balanced text-6xl"></i></div>
                 <div class="flex justify-between items-start mb-2">
-                    <h3 class="font-bold text-trading-yellow text-sm">门下省 - 风控审核中心</h3>
+                    <h3 class="font-bold text-trading-yellow text-sm">风控审计中心 (Risk Hub)</h3>
                     <div class="flex items-center gap-2">
                         <span class="status-dot bg-trading-yellow" id="status-menxia"></span>
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-700/50">真实联动</span>
@@ -401,7 +405,7 @@
             <div class="glass-panel p-4 rounded-lg flex-1 flex flex-col relative overflow-hidden group hover:border-trading-red/30 transition-colors">
                 <div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity"><i class="fa-solid fa-gavel text-6xl"></i></div>
                 <div class="flex justify-between items-start mb-2">
-                    <h3 class="font-bold text-trading-red text-sm">尚书省 - 指令执行中心</h3>
+                    <h3 class="font-bold text-trading-red text-sm">指令执行中心 (Execution Hub)</h3>
                     <div class="flex items-center gap-2">
                         <span class="status-dot bg-slate-500" id="status-shangshu"></span>
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-700/50">真实联动</span>
@@ -416,7 +420,7 @@
         </section>
 
         <!-- CENTER: Six Ministries (Execution Modules) -->
-        <section class="w-1/2 flex flex-col gap-4">
+        <section class="w-1/2 min-h-0 flex flex-col gap-4 overflow-y-auto pr-1">
             <div class="flex items-center gap-2 text-trading-dim text-xs font-bold uppercase tracking-widest border-b border-slate-700 pb-2">
                 <i class="fa-solid fa-chess-board"></i> 核心执行模块 (Core Execution)
             </div>
@@ -425,11 +429,11 @@
                 <span>以展示与观测为主，部分字段为占位或弱联动</span>
             </div>
             
-            <div class="grid grid-cols-2 grid-rows-3 gap-4 flex-1">
+            <div class="grid grid-cols-2 grid-rows-3 gap-4 flex-1 min-h-[720px]">
                 <!-- Li Bu (Personnel) -->
                 <div id="panel-li" class="glass-panel p-4 rounded-lg flex-1 flex flex-col justify-between hover:bg-slate-800/50 transition-colors border-l-2 border-l-purple-500">
                     <div class="flex justify-between items-center">
-                        <div class="flex items-center gap-2 text-purple-400 font-bold"><i class="fa-solid fa-users-gear"></i> 吏部 - 资金部</div>
+                        <div class="flex items-center gap-2 text-purple-400 font-bold"><i class="fa-solid fa-users-gear"></i> 策略管理 (Strategy Mgmt)</div>
                         <div class="text-[10px] bg-slate-700 px-1 rounded text-slate-300">运行中</div>
                     </div>
                     <div class="text-[10px] text-slate-500 mt-1">仓位管理 & 策略分配</div>
@@ -449,7 +453,7 @@
                 <!-- Hu Bu (Revenue) -->
                 <div id="panel-hu" class="glass-panel p-4 rounded-lg flex-1 flex flex-col justify-between hover:bg-slate-800/50 transition-colors border-l-2 border-l-yellow-500">
                     <div class="flex justify-between items-center">
-                        <div class="flex items-center gap-2 text-trading-yellow font-bold"><i class="fa-solid fa-coins"></i> 户部 - 交易部</div>
+                        <div class="flex items-center gap-2 text-trading-yellow font-bold"><i class="fa-solid fa-coins"></i> 资产结算 (Account Hub)</div>
                         <div class="text-[10px] bg-slate-700 px-1 rounded text-slate-300">稽核</div>
                     </div>
                     <div class="text-[10px] text-slate-500 mt-1">资金核算 & 盈亏统计</div>
@@ -467,7 +471,7 @@
                 <!-- Li Bu (Rites) -->
                 <div id="panel-li-rites" class="glass-panel p-4 rounded-lg flex-1 flex flex-col justify-between hover:bg-slate-800/50 transition-colors border-l-2 border-l-blue-400">
                     <div class="flex justify-between items-center">
-                        <div class="flex items-center gap-2 text-blue-400 font-bold"><i class="fa-solid fa-book-journal-whills"></i> 礼部 - 合规部</div>
+                        <div class="flex items-center gap-2 text-blue-400 font-bold"><i class="fa-solid fa-book-journal-whills"></i> 合规与风控 (Compliance)</div>
                         <div class="text-[10px] bg-slate-700 px-1 rounded text-slate-300">监测</div>
                     </div>
                     <div class="text-[10px] text-slate-500 mt-1">市场情绪 & 交易合规</div>
@@ -482,7 +486,7 @@
                 <div id="panel-bing" class="glass-panel p-4 rounded-lg flex-1 flex flex-col justify-between hover:bg-slate-800/50 transition-colors border-l-2 border-l-red-600 relative overflow-hidden">
                     <div class="absolute -right-4 -bottom-4 text-red-900/20 text-8xl"><i class="fa-solid fa-crosshairs"></i></div>
                     <div class="flex justify-between items-center relative z-10">
-                        <div class="flex items-center gap-2 text-red-500 font-bold"><i class="fa-solid fa-person-rifle"></i> 兵部 - 操盘部</div>
+                        <div class="flex items-center gap-2 text-red-500 font-bold"><i class="fa-solid fa-person-rifle"></i> 实时操盘 (Operation)</div>
                         <div class="text-[10px] bg-red-900/50 text-red-300 px-1 rounded animate-pulse">交易信号</div>
                     </div>
                     <div class="text-[10px] text-slate-500 mt-1 relative z-10">买卖信号执行</div>
@@ -506,7 +510,7 @@
                 <!-- Xing Bu (Justice) -->
                 <div id="panel-xing" class="glass-panel p-4 rounded-lg flex-1 flex flex-col justify-between hover:bg-slate-800/50 transition-colors border-l-2 border-l-orange-600">
                     <div class="flex justify-between items-center">
-                        <div class="flex items-center gap-2 text-orange-500 font-bold"><i class="fa-solid fa-gavel"></i> 刑部 - 风控部</div>
+                        <div class="flex items-center gap-2 text-orange-500 font-bold"><i class="fa-solid fa-gavel"></i> 违规审计 (Sanctions Hub)</div>
                         <div class="text-[10px] bg-slate-700 px-1 rounded text-slate-300">风控</div>
                     </div>
                     <div class="text-[10px] text-slate-500 mt-1">风控强平 & 违规惩戒</div>
@@ -527,7 +531,7 @@
                 <!-- Gong Bu (Works) -->
                 <div id="panel-gong" class="glass-panel p-4 rounded-lg flex-1 flex flex-col justify-between hover:bg-slate-800/50 transition-colors border-l-2 border-l-cyan-500">
                     <div class="flex justify-between items-center">
-                        <div class="flex items-center gap-2 text-cyan-400 font-bold"><i class="fa-solid fa-industry"></i> 工部 - 数据部 / 运维部</div>
+                        <div class="flex items-center gap-2 text-cyan-400 font-bold"><i class="fa-solid fa-industry"></i> 基础支撑 (Infra Hub)</div>
                         <div class="text-[10px] bg-slate-700 px-1 rounded text-slate-300">协同</div>
                     </div>
                     <div class="text-[10px] text-slate-500 mt-1">数据清洗 & 指标计算</div>
@@ -553,7 +557,7 @@
         </section>
 
         <!-- RIGHT: Imperial Archives (Log) -->
-        <section class="w-1/4 flex flex-col gap-4">
+        <section class="w-1/4 min-h-0 flex flex-col gap-4 overflow-hidden">
             <div class="flex items-center gap-2 text-trading-dim text-xs font-bold uppercase tracking-widest border-b border-slate-700 pb-2">
                 <i class="fa-solid fa-clock-rotate-left"></i> 系统运行日志 (System Logs)
             </div>
@@ -569,9 +573,19 @@
                         <button id="strategy-quick-toggle-btn" onclick="toggleRightPanel('strategy')" class="text-[10px] px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 border border-slate-500">折叠</button>
                     </div>
                     <div id="strategy-quick-body">
-                        <div id="strategy-quick-name" class="text-sm font-bold text-white mb-1">全部策略总览</div>
-                        <div id="strategy-quick-logic" class="text-[11px] text-slate-300">多策略协同：并行生成信号，由风控统一审核执行。</div>
-                        <div id="strategy-quick-example" class="text-[10px] text-slate-500 mt-1">示例：当07与01同向看多时，信号一致性提升。</div>
+                        <div id="strategy-quick-name" class="text-sm font-bold text-white mb-1">加密策略总览</div>
+                        <div id="strategy-quick-logic" class="text-[11px] text-slate-300">趋势、突破、回归、多周期动量并行评估，由风控统一决定是否执行。</div>
+                        <div id="strategy-quick-example" class="text-[10px] text-slate-500 mt-1">示例：当 10 / 11 / 14 同时偏多时，主流币做多胜率通常会更高一些。</div>
+                        <div class="mt-3 bg-slate-900/70 border border-slate-700 rounded p-2">
+                            <div class="flex items-center justify-between">
+                                <div class="text-[10px] text-slate-400">市场方向评分面板</div>
+                                <div id="crypto-market-regime" class="text-[10px] text-cyan-300">--</div>
+                            </div>
+                            <div class="mt-2 grid grid-cols-3 gap-2" id="crypto-market-grid">
+                                <div class="bg-slate-950 border border-slate-800 rounded p-2 text-[10px] text-slate-400">加载中...</div>
+                            </div>
+                            <div class="mt-2 text-[10px] text-slate-500" id="crypto-market-engine-note">--</div>
+                        </div>
                         <div class="mt-2 bg-slate-900/70 border border-slate-700 rounded p-2 space-y-1">
                             <div class="text-[10px] text-slate-400">走势分层判定（ER+区间收益）</div>
                             <div class="flex items-center justify-between">
@@ -648,8 +662,8 @@
                                 </div>
                             </div>
                             <div id="fund-pool-lot-block" class="mt-2 bg-slate-900/60 border border-slate-700 rounded p-2">
-                                <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">批次明细（T+1解锁）</div>
-                                <div id="live-lot-summary" class="text-[10px] text-slate-300 font-mono mb-1">总持仓 -- 手 | 可卖 -- 手 | 冻结 -- 手</div>
+                                <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">持仓批次明细（T+0）</div>
+                                <div id="live-lot-summary" class="text-[10px] text-slate-300 font-mono mb-1">总持仓 -- 币 | 可卖 -- 币 | 冻结 -- 币</div>
                                 <div id="live-lot-list" class="max-h-24 overflow-y-auto space-y-1 text-[10px] font-mono text-slate-300">
                                     <div class="text-slate-500">暂无持仓批次</div>
                                 </div>
@@ -786,19 +800,26 @@
     </main>
 
     <!-- Bottom Control Bar -->
-    <footer class="h-16 border-t border-slate-700 bg-trading-bg flex items-center justify-between px-6 z-20">
+    <footer class="h-16 shrink-0 border-t border-slate-700 bg-trading-bg flex items-center justify-between px-6 z-20">
         <div class="flex items-center gap-4">
             <div class="relative">
                 <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded border border-slate-600 focus-within:border-trading-blue focus-within:ring-1 focus-within:ring-trading-blue transition-all">
                     <span class="text-slate-400 text-xs"><i class="fa-solid fa-magnifying-glass"></i></span>
-                    <input type="text" id="stock-search-input" value="301227"
+                    <input type="text" id="stock-search-input" value="BTCUSDT"
                         class="bg-transparent border-none text-white focus:outline-none w-32 text-sm font-mono uppercase font-bold placeholder-slate-600" 
-                        placeholder="CODE/PINYIN" autocomplete="off">
+                        placeholder="BTCUSDT / ETHUSDT" autocomplete="off">
                 </div>
                 <!-- Search Results Dropdown -->
                 <div id="stock-search-results" class="hidden absolute bottom-full left-0 mb-2 w-64 bg-slate-900 border border-slate-600 rounded-lg shadow-2xl z-50 max-h-60 overflow-y-auto custom-scrollbar">
                     <!-- Dynamic Content -->
                 </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-[10px] text-slate-500 uppercase font-bold mr-1">热门币种:</span>
+                <button onclick="setQuickPair('BTCUSDT')" class="bg-amber-700/80 hover:bg-amber-600 text-white px-3 py-1.5 rounded border border-amber-500 text-xs font-bold">BTC</button>
+                <button onclick="setQuickPair('ETHUSDT')" class="bg-sky-700/80 hover:bg-sky-600 text-white px-3 py-1.5 rounded border border-sky-500 text-xs font-bold">ETH</button>
+                <button onclick="setQuickPair('SOLUSDT')" class="bg-emerald-700/80 hover:bg-emerald-600 text-white px-3 py-1.5 rounded border border-emerald-500 text-xs font-bold">SOL</button>
+                <button onclick="setQuickPair('BNBUSDT')" class="bg-yellow-700/80 hover:bg-yellow-600 text-white px-3 py-1.5 rounded border border-yellow-500 text-xs font-bold">BNB</button>
             </div>
             <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
                 <span class="text-slate-400 text-xs"><i class="fa-solid fa-calendar-days"></i></span>
@@ -817,12 +838,13 @@
                 <input id="bt-end-date" type="date" class="bg-transparent text-white text-xs focus:outline-none" />
             </div>
             <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
-                <span class="text-slate-400 text-xs"><i class="fa-solid fa-yen-sign"></i></span>
+                <span class="text-slate-400 text-xs"><i class="fa-solid fa-dollar-sign"></i></span>
                 <input id="bt-capital-input" type="number" min="10000" step="10000" value="1000000" class="bg-transparent border-none text-white focus:outline-none w-28 text-xs font-mono" />
             </div>
             <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded border border-slate-600">
                 <span class="text-slate-400 text-xs"><i class="fa-solid fa-database"></i></span>
                 <select id="source-select" onchange="onSourceSelectChange(this.value)" class="bg-transparent text-white focus:outline-none text-xs font-medium">
+                    <option value="binance" selected>Binance</option>
                     <option value="default">默认数据源</option>
                     <option value="tushare">Tushare</option>
                     <option value="akshare">AKShare</option>
@@ -863,7 +885,7 @@
             <div id="action-secondary-inline" class="flex items-center gap-2">
                 <button id="pattern-picker-btn" onclick="openPatternPicker()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-slate-500 min-w-[108px]">
                     <i class="fa-solid fa-table-cells-large"></i>
-                    <span>经典形态</span>
+                    <span>加密预设</span>
                 </button>
                 <button onclick="openConfigCenter()" class="bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded font-bold text-sm transition-all border border-purple-500 min-w-[108px]">
                     <i class="fa-solid fa-sliders"></i> 配置中心
@@ -878,7 +900,7 @@
                     <span>更多</span>
                 </button>
                 <div id="action-more-menu" class="hidden absolute right-0 bottom-12 w-40 bg-slate-900 border border-slate-700 rounded shadow-2xl p-1.5 space-y-1 z-[130]">
-                    <button onclick="openPatternPicker(); closeActionMoreMenu();" class="w-full text-left bg-slate-800 hover:bg-slate-700 text-white px-2 py-1.5 rounded text-xs border border-slate-700"><i class="fa-solid fa-table-cells-large mr-1"></i>经典形态</button>
+                    <button onclick="openPatternPicker(); closeActionMoreMenu();" class="w-full text-left bg-slate-800 hover:bg-slate-700 text-white px-2 py-1.5 rounded text-xs border border-slate-700"><i class="fa-solid fa-table-cells-large mr-1"></i>加密预设</button>
                     <button onclick="openConfigCenter(); closeActionMoreMenu();" class="w-full text-left bg-purple-800 hover:bg-purple-700 text-white px-2 py-1.5 rounded text-xs border border-purple-700"><i class="fa-solid fa-sliders mr-1"></i>配置中心</button>
                     <button id="webhook-retry-menu-btn" onclick="openWebhookRetryCenter(); closeActionMoreMenu();" class="w-full text-left bg-amber-800 hover:bg-amber-700 text-white px-2 py-1.5 rounded text-xs border border-amber-700"><i class="fa-solid fa-bell mr-1"></i>推送补偿</button>
                 </div>
@@ -888,10 +910,10 @@
     <div id="pattern-picker-modal" class="hidden fixed inset-0 bg-black/70 z-[155] flex items-center justify-center p-5">
         <div class="w-[1450px] max-w-[98vw] h-[86vh] bg-slate-900 border border-slate-700 rounded-lg shadow-2xl flex flex-col overflow-hidden">
             <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-                <div class="text-white font-bold"><i class="fa-solid fa-table-cells-large mr-2 text-cyan-300"></i>经典形态快速选择</div>
+                <div class="text-white font-bold"><i class="fa-solid fa-table-cells-large mr-2 text-cyan-300"></i>加密市场快速选择</div>
                 <button onclick="closePatternPicker()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="px-4 py-2 text-xs text-slate-400 border-b border-slate-700">选择一个形态后自动回填股票代码与开始/结束日期（回测区间自动切到自定义）</div>
+            <div class="px-4 py-2 text-xs text-slate-400 border-b border-slate-700">选择一个交易对预设后会自动回填交易对与开始/结束日期（回测区间自动切到自定义）</div>
             <div id="pattern-picker-grid" class="flex-1 min-h-0 p-4 grid grid-cols-5 grid-rows-2 gap-3 overflow-y-auto"></div>
         </div>
     </div>
@@ -1267,7 +1289,7 @@
     <script>
         // System State
         const SYSTEM_STATE = {
-            stock: '301227.SZ',
+            stock: 'BTCUSDT',
             price: 0,
             assets: 1000000,
             strategy: 'Trend Follow',
@@ -1317,6 +1339,7 @@
         let strategyRegimeLastKey = '';
         let strategyRegimeLastAt = 0;
         let strategyRegimeSnapshot = null;
+        let cryptoMarketPanelSnapshot = null;
         let strategyManagerSortByPosition = false;
         let strategyManagerSortDirection = 'desc';
         let strategyManagerPage = 1;
@@ -1447,12 +1470,12 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 trigger: '多周期并行（按各策略trigger_timeframe）',
                 entry_rules: ['所有策略并行评估入场条件，命中后进入统一风控审核。'],
                 exit_rules: ['策略各自触发离场条件后，由执行模块模拟成交。'],
-                params: ['每次信号默认下单数量：1000股（各策略当前实现）'],
-                note: '适合先观察系统联动与策略分歧程度。',
-                example: '示例：若07与01同向看多，信号一致性提升；若方向分歧，置信度会下降。'
+                params: ['每次信号默认下单模式：按资金比例分配，支持小数仓位'],
+                note: '适合先观察多策略在加密行情下的分歧与协同。',
+                example: '示例：若多个策略同时对 BTCUSDT 给出多头判断，信号一致性会上升。'
             },
             '00': {
-                name: '00 长期持有一次买入',
+                name: '00 长期持有策略',
                 trigger: '日线',
                 entry_rules: [
                     '仅在首次触发时买入一次。',
@@ -1463,137 +1486,125 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 note: '该策略仅用于回测基准对照，模拟买入并持有到回测结束。',
                 example: '示例：第一根K线买入后全程持有，最后一根K线自动平仓。'
             },
-            '01': {
-                name: '01 三周期共振波段',
-                trigger: '60分钟',
+            '10': {
+                name: '10 均线引力趋势追踪',
+                trigger: '1小时',
                 entry_rules: [
-                    '周线MA20上升（最近两根周线MA20：最新 > 上一根）。',
-                    '日线回踩条件：|日线最低价 - 日线MA10| / 日线MA10 < 2%。',
-                    '60分钟MACD金叉：当前DIF > DEA 且上一根DIF <= DEA。',
-                    '60分钟放量：当前成交量 > 近5根60分钟均量。'
-                ],
-                exit_rules: ['持仓后若日线收盘价 < 日线MA20，则卖出离场。'],
-                params: ['止损价：买入价 * 0.97', '止盈：无固定止盈'],
-                note: '数据窗口要求较高：至少500根基础K线、20根日线/周线、35根60分钟线。',
-                example: '示例：周线趋势向上 + 日线靠近MA10 + 60分钟金叉放量 -> 触发买入。'
-            },
-            '02': {
-                name: '02 短线弱转强烂板',
-                trigger: '1分钟',
-                entry_rules: ['当前代码实现中无入场条件（不会主动买入）。'],
-                exit_rules: ['已有持仓时，持仓bar数 >= 240则卖出（Next Day Exit）。'],
-                params: ['最大持有：240个触发bar'],
-                note: '该策略当前版本主要保留离场框架，入场逻辑待补充。',
-                example: '示例：若外部已有仓位，达到240个bar后强制离场。'
-            },
-            '03': {
-                name: '03 ETF行业轮动',
-                trigger: '日线',
-                entry_rules: ['日线收盘价 > 日线MA10 -> 买入。'],
-                exit_rules: ['持仓后若日线收盘价 < 日线MA10 -> 卖出。'],
-                params: ['止损价：买入价 * 0.95', '止盈：无固定止盈'],
-                note: '至少需要10根日线数据；当前实现名称为ETF轮动，但对单标的也可运行。',
-                example: '示例：日线重新站上MA10建仓，跌破MA10离场。'
-            },
-            '04': {
-                name: '04 龙头首阴反包',
-                trigger: '日线',
-                entry_rules: ['当前代码实现中无入场逻辑（on_bar 直接返回 None）。'],
-                exit_rules: ['当前代码实现中无离场逻辑。'],
-                params: ['无'],
-                note: '该策略尚未实现，属于占位策略。',
-                example: '示例：当前版本不会产生任何交易信号。'
-            },
-            '05': {
-                name: '05 3N法则主升浪',
-                trigger: '30分钟',
-                entry_rules: [
-                    '30分钟MACD多头：DIF > DEA 且 DIF > 0。',
-                    '30分钟放量：当前成交量 > 近5根30分钟均量 * 1.5。'
-                ],
-                exit_rules: ['持仓后若持有bar数 >= 1200，则按时间离场（Time 5 Days）。'],
-                params: ['止损价：买入价 * 0.95', '止盈价：买入价 * 1.10'],
-                note: '至少需要20根30分钟数据。',
-                example: '示例：30分钟水上金叉且明显放量时买入，达到时长或止盈止损后离场。'
-            },
-            '06': {
-                name: '06 海豚交易法',
-                trigger: '1分钟',
-                entry_rules: [
-                    '趋势过滤：当前价 > MA26。',
-                    'MACD金叉：当前DIF > DEA 且上一根DIF <= 上一根DEA。',
-                    '水上金叉：当前DIF > 0 且 当前DEA > 0。'
-                ],
-                exit_rules: ['持仓后使用1%追踪止损：当前低点 <= 追踪止损价则卖出。'],
-                params: ['初始止损：买入价 * 0.99', '追踪止损：最高价 * 0.99'],
-                note: '至少需要50根基础K线。',
-                example: '示例：上穿MA26并出现水上金叉入场，后续按最高价动态抬升止损线。'
-            },
-            '07': {
-                name: '07 跳空交易系统',
-                trigger: '15分钟',
-                entry_rules: [
-                    '跳空低开：当前15分钟open < 上一根15分钟close * 0.998。',
-                    '阳线确认：当前15分钟close > 当前15分钟open。'
-                ],
-                exit_rules: ['持仓后使用1%追踪止损：当前价 <= 追踪止损价则卖出。'],
-                params: ['初始止损：买入价 * 0.99', '追踪止损：最高价 * 0.99'],
-                note: '至少需要20根15分钟数据。',
-                example: '示例：15分钟出现低开反包阳线后入场，随后按追踪止损管理仓位。'
-            },
-            '08': {
-                name: '08 神奇九转',
-                trigger: '1分钟',
-                entry_rules: [
-                    '九连条件：最近9根K线均满足 close[i] > close[i-4]。',
-                    '强化校验：第5根 > 第1根，且第9根 > 第5根。'
-                ],
-                exit_rules: ['持仓后使用1%追踪止损：当前收盘价 <= 追踪止损价则卖出。'],
-                params: ['初始止损：买入价 * 0.99', '追踪止损：最高价 * 0.99'],
-                note: '至少需要13根基础K线（9根序列 + 4根比较滞后）。',
-                example: '示例：九连条件和强化校验同时满足后入场，回落触发追踪止损时离场。'
-            },
-            '09': {
-                name: '09 箱体降本策略',
-                trigger: '日线',
-                entry_rules: [
-                    '箱体基准：最近240根日线（不含当根）计算上轨/下轨。',
-                    '底仓建仓：价格位于箱体下半区且RSI低于阈值时，优先补到基础仓位。',
-                    '机动低吸：价格接近下轨且RSI超卖时，分批加机动仓。'
+                    '快线EMA上穿慢线EMA，且价格位于长周期EMA之上。',
+                    'ATR与均线趋势同步向上，避免逆势追单。'
                 ],
                 exit_rules: [
-                    '机动高抛：价格接近上轨且RSI超买时，优先卖出机动仓。',
-                    '跌破止损：价格跌破箱体下轨一定比例时，清仓并停用该策略。',
-                    '上破停用：价格突破箱体上轨一定比例时，停止继续加减仓。'
+                    '快线EMA下穿慢线EMA时卖出。',
+                    '持仓后启用ATR追踪止损和固定收益保护。'
                 ],
-                params: ['箱体周期: 240', '突破阈值: 5%', 'RSI: 14', '超卖/超买: 30/70', '底仓/机动仓: 可配置'],
-                note: '策略09按日线触发，适合震荡区间做降本和仓位再平衡。',
-                example: '示例：日线接近下轨且RSI=28分批低吸，价格回到上轨附近且RSI>70后高抛机动仓。'
+                params: ['快线EMA: 21', '慢线EMA: 55', '趋势EMA: 200', 'ATR止损倍数: 2.5'],
+                note: '适合 BTC / ETH / SOL 这类高流动性主流币种的趋势波段。',
+                example: '示例：BTCUSDT 在 1 小时级别重新站上 EMA55 且 EMA21 金叉后开仓。'
+            },
+            '11': {
+                name: '11 唐奇安通道破位捕捉',
+                trigger: '4小时',
+                entry_rules: [
+                    '价格向上突破近20根4小时高点。',
+                    '同时价格仍位于趋势EMA上方，避免逆势追突破。'
+                ],
+                exit_rules: [
+                    '跌破近10根4小时低点或ATR追踪位时离场。',
+                    '趋势EMA失守时主动撤退。'
+                ],
+                params: ['突破窗口: 20', '离场窗口: 10', 'ATR止损倍数: 2.2'],
+                note: '更适合 BTC / ETH 这类有中期趋势延续的主流币。',
+                example: '示例：BTCUSDT 突破近20根4小时箱体上沿时跟随。'
+            },
+            '12': {
+                name: '12 ATR 波动率自适应',
+                trigger: '1小时',
+                entry_rules: [
+                    '1小时价格回到EMA上方，EMA继续上行。',
+                    '动量确认：突破上一根高点且RSI维持强势。'
+                ],
+                exit_rules: [
+                    '跌破ATR动态止损位时离场。',
+                    'RSI回落且价格重新失守EMA时退出。'
+                ],
+                params: ['EMA: 34', 'ATR通道倍数: 2.8', '入场RSI下限: 54'],
+                note: '适合顺着主趋势做二次启动，不适合极度横盘时段。',
+                example: '示例：ETHUSDT 日内回踩后再次放量上破时参与。'
+            },
+            '13': {
+                name: '13 布林极限均值回归',
+                trigger: '1小时',
+                entry_rules: [
+                    '价格下穿布林下轨后重新站回。',
+                    'RSI进入超卖区，等待短线均值回归。'
+                ],
+                exit_rules: [
+                    '反弹到布林中轨或RSI回到中性区时止盈。',
+                    '跌破下轨过深时止损离场。'
+                ],
+                params: ['布林周期: 20', '标准差: 2', '超卖RSI: 32'],
+                note: '这是逆势回归策略，只适合震荡或急跌后的修复段。',
+                example: '示例：SOLUSDT 快速下杀后重新站回下轨，做一段修复反弹。'
+            },
+            '14': {
+                name: '14 多维共振动量引擎',
+                trigger: '4小时',
+                entry_rules: [
+                    '4小时EMA21上穿EMA55。',
+                    '日线价格位于EMA20之上，多周期动量得分达到75分以上。'
+                ],
+                exit_rules: [
+                    '多周期动量分塌陷到25分以下时离场。',
+                    '或触发ATR追踪止损时退出。'
+                ],
+                params: ['4小时EMA: 21/55', '日线EMA: 20', '动量评分阈值: 75'],
+                note: '适合做“方向评分 + 仓位建议”的核心母策略。',
+                example: '示例：BTC/ETH/SOL 多周期同时转强时，作为主跟随策略。'
+            },
+            '15': {
+                name: '15 闪电高频剥头皮 (Scalp)',
+                trigger: '15分钟',
+                entry_rules: [
+                    '15分钟EMA9上穿EMA21。',
+                    '价格位于1小时EMA21之上，且RSI强劲。'
+                ],
+                exit_rules: [
+                    '跌破EMA21或触发ATR止损时快速平仓。',
+                    '达到固定止盈目标时离场。'
+                ],
+                params: ['快线EMA: 9', '慢线EMA: 21', 'RSI下限: 52'],
+                note: '极速交易策略，捕捉日内波动。',
+                example: '示例：日内强势拉升时的小级别切入。'
+            },
+            '16': {
+                name: '16 机构博弈庄家足迹',
+                trigger: '4小时',
+                entry_rules: [
+                    '庄家吸筹：OBV持续上涨 + CMF资金流入。',
+                    '宏观环境：价格站稳1日EMA200牛市分界线。'
+                ],
+                exit_rules: [
+                    '撤资预警：巨量滞涨或RSI严重超买。',
+                    '熊市阴跌：价格跌破EMA50转弱时退出。'
+                ],
+                params: ['宏观EMA: 200', '资金流阈值: 0.02', '离场倍率: 3.0'],
+                note: '核心机构跟随策略，适合长线波段。',
+                example: '示例：在日线级别底部分批建仓后，全程跟随趋势。'
             }
         };
         const STRATEGY_FALLBACK = [
-            { id: '00', name: '长期持有一次买入' },
-            { id: '01', name: '三周期共振波段' },
-            { id: '02', name: '短线弱转强烂板' },
-            { id: '03', name: 'ETF行业轮动' },
-            { id: '04', name: '龙头首阴反包' },
-            { id: '05', name: '3N法则主升浪' },
-            { id: '06', name: '海豚交易法' },
-            { id: '07', name: '跳空交易系统' },
-            { id: '08', name: '神奇九转' },
-            { id: '09', name: '箱体降本策略' }
+            { id: '10', name: '10 均线引力趋势追踪' },
+            { id: '11', name: '11 唐奇安通道破位捕捉' },
+            { id: '12', name: '12 ATR 波动率自适应' },
+            { id: '13', name: '13 布林极限均值回归' },
+            { id: '14', name: '14 多维共振动量引擎' },
+            { id: '15', name: '15 闪电高频剥头皮 (Scalp)' },
+            { id: '16', name: '16 机构博弈庄家足迹' }
         ];
         const CLASSIC_PATTERNS = [
-            { id: 'p1', patternName: '单边大牛市（主升浪）', stockName: '上纬新材', stockCode: '688585', start: '2025-07-09', end: '2025-12-31' },
-            { id: 'p2', patternName: '单边大熊市（主跌浪）', stockName: '仕净科技', stockCode: '301030', start: '2025-01-02', end: '2025-06-30' },
-            { id: 'p3', patternName: '妖股连板脉冲（极端题材牛市）', stockName: '首开股份', stockCode: '600376', start: '2025-07-01', end: '2025-12-31' },
-            { id: 'p4', patternName: '矩形箱体震荡（标准区间震荡）', stockName: '中国中免', stockCode: '601888', start: '2025-01-02', end: '2025-06-30' },
-            { id: 'p5', patternName: '对称三角形整理（变盘形态）', stockName: '先导智能', stockCode: '300450', start: '2025-04-01', end: '2025-09-30' },
-            { id: 'p6', patternName: '上升旗形（上涨中继）', stockName: '剑桥科技', stockCode: '603083', start: '2025-03-03', end: '2025-08-29' },
-            { id: 'p7', patternName: '高位横盘强势整理', stockName: '中国移动', stockCode: '600941', start: '2025-07-01', end: '2025-12-31' },
-            { id: 'p8', patternName: '下降楔形（诱空见底）', stockName: '中国石油', stockCode: '601857', start: '2025-01-02', end: '2025-06-30' },
-            { id: 'p9', patternName: 'W底/双底反转（底部反转）', stockName: '东方日升', stockCode: '300118', start: '2025-06-02', end: '2025-11-28' },
-            { id: 'p10', patternName: 'V型反转（熊转牛）', stockName: '立讯精密', stockCode: '002475', start: '2025-09-01', end: '2025-12-31' }
+            { id: 'p1', patternName: 'BTC 趋势波段', stockName: 'Bitcoin', stockCode: 'BTCUSDT', start: '2025-01-01', end: '2025-12-31' },
+            { id: 'p2', patternName: 'ETH 趋势跟随', stockName: 'Ethereum', stockCode: 'ETHUSDT', start: '2025-01-01', end: '2025-12-31' },
+            { id: 'p3', patternName: 'SOL 高波动突破', stockName: 'Solana', stockCode: 'SOLUSDT', start: '2025-01-01', end: '2025-12-31' }
         ];
         let patternPickerRendered = false;
         let patternKlineCache = {};
@@ -2071,7 +2082,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             if (!Array.isArray(rawList)) return out;
             rawList.forEach(item => {
                 const code = normalizeCode(String(item || ''));
-                if (!/^\d{6}\.(SH|SZ)$/.test(code)) return;
+                if (!/^[A-Z0-9]{5,20}$/.test(code)) return;
                 if (seen.has(code)) return;
                 seen.add(code);
                 out.push(code);
@@ -2083,8 +2094,8 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             const configured = normalizeStockCodeList(getByPath(configDraft, 'targets', []));
             if (configured.length) return configured;
             const raw = document.getElementById('stock-search-input').value || '';
-            const code = normalizeCode(raw || '600036');
-            if (!/^\d{6}\.(SH|SZ)$/.test(code)) return [];
+            const code = normalizeCode(raw || 'BTCUSDT');
+            if (!/^[A-Z0-9]{5,20}$/.test(code)) return [];
             return [code];
         }
 
@@ -2092,7 +2103,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             if (!liveEnabled) return;
             const targets = resolveLiveStartTargets();
             if (!targets.length) {
-                logMessage('SYSTEM', '未找到可用监控标的：请先在配置中心填写监控标的列表，或在输入框填写有效股票代码', 'danger');
+                logMessage('SYSTEM', '未找到可用交易对：请先在配置中心填写交易对列表，或在输入框填写有效交易对', 'danger');
                 return false;
             }
             const picked = Array.isArray(selectedStrategyIds) ? selectedStrategyIds.slice() : [];
@@ -2101,7 +2112,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             if (targets.length === 1) payload.stock_code = targets[0];
             else payload.stock_codes = targets;
             if (!useAll) payload.strategy_ids = picked;
-            const targetSummary = targets.length > 1 ? `${targets.length}只标的` : targets[0];
+            const targetSummary = targets.length > 1 ? `${targets.length}个交易对` : targets[0];
             const strategySummary = useAll ? '全部策略' : `${picked.length}个策略`;
             logMessage('SYSTEM', `正在启动实盘监控：${targetSummary}，${strategySummary}`, 'system');
             try {
@@ -2135,7 +2146,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             const targets = resolveLiveStartTargets();
             if (!targets.length) {
                 const raw = document.getElementById('stock-search-input').value || '';
-                logMessage('SYSTEM', `未找到有效监控标的（输入: ${raw || '空'}）`, 'danger');
+                logMessage('SYSTEM', `未找到有效交易对（输入: ${raw || '空'}）`, 'danger');
                 return;
             }
             setLiveActionPending(true);
@@ -2156,6 +2167,9 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         const resultsBox = document.getElementById('stock-search-results');
         let searchTimeout;
         const CONSOLE_STATE_KEY = 'jince-console-state-v1';
+        const BOARD_CONFIG_SYNC_INTERVAL_MS = 60000;
+        let lastBoardConfigSyncAt = 0;
+        let capitalInputFocused = false;
 
         function persistConsoleState() {
             try {
@@ -2193,6 +2207,15 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             } catch (_) {}
         }
 
+        function setQuickPair(code) {
+            if (!searchInput) return;
+            searchInput.value = normalizeCode(code);
+            resultsBox.classList.add('hidden');
+            persistConsoleState();
+            scheduleStrategyRegimeHintRefresh(true);
+            fetchCryptoMarketPanel(false);
+        }
+
         searchInput.addEventListener('input', (e) => {
             const val = e.target.value.trim();
             persistConsoleState();
@@ -2215,7 +2238,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         function renderSearchResults(results) {
             resultsBox.innerHTML = '';
             if (!results || results.length === 0) {
-                resultsBox.innerHTML = '<div class="p-3 text-xs text-slate-500 text-center">未找到匹配股票</div>';
+                resultsBox.innerHTML = '<div class="p-3 text-xs text-slate-500 text-center">未找到匹配交易对</div>';
             } else {
                 results.forEach(stock => {
                     const div = document.createElement('div');
@@ -2245,7 +2268,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
 
         async function restartSimulation(code) {
             if (!liveEnabled) return;
-            logMessage('SYSTEM', `正在切换监控标的: ${code}...`, 'warning');
+            logMessage('SYSTEM', `正在切换交易对: ${code}...`, 'warning');
             const picked = Array.isArray(selectedStrategyIds) ? selectedStrategyIds.slice() : [];
             const useAll = picked.length === 0 || picked.length === strategyCatalog.length;
             const payload = { stock_code: normalizeCode(code), replace_existing: true };
@@ -2263,7 +2286,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 }
                 await syncStatus();
             } catch (e) {
-                logMessage('SYSTEM', `切换监控标的失败: ${e}`, 'danger');
+                logMessage('SYSTEM', `切换交易对失败: ${e}`, 'danger');
             }
         }
 
@@ -2284,9 +2307,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         }
 
         function normalizeCode(raw) {
-            const v = String(raw || '').trim().toUpperCase();
-            if (v.includes('.SH') || v.includes('.SZ')) return v;
-            if (/^\d{6}$/.test(v)) return v.startsWith('6') ? `${v}.SH` : `${v}.SZ`;
+            const v = String(raw || '').trim().toUpperCase().replace(/\//g, '').replace(/-/g, '').replace(/_/g, '').replace(/\s+/g, '');
             return v;
         }
 
@@ -2587,11 +2608,8 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             const totalQty = Number(data?.total_qty || 0);
             const sellableQty = Number(data?.sellable_qty || 0);
             const lockedQty = Number(data?.locked_qty || 0);
-            const totalLot = totalQty / 100;
-            const sellableLot = sellableQty / 100;
-            const lockedLot = lockedQty / 100;
             const timeText = String(data?.time || '--');
-            summary.innerText = `[${timeText}] 总持仓 ${totalLot.toFixed(0)} 手 | 可卖 ${sellableLot.toFixed(0)} 手 | 冻结 ${lockedLot.toFixed(0)} 手`;
+            summary.innerText = `[${timeText}] 总持仓 ${totalQty.toFixed(4)} 币 | 可卖 ${sellableQty.toFixed(4)} 币 | 冻结 ${lockedQty.toFixed(4)} 币`;
             const rows = Array.isArray(data?.rows) ? data.rows : [];
             if (!rows.length) {
                 list.innerHTML = '<div class="text-slate-500">暂无持仓批次</div>';
@@ -2608,7 +2626,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 const unitCost = Number(r?.unit_cost || 0);
                 const color = sellable > 0 ? 'text-emerald-300' : 'text-amber-300';
                 row.className = `${color} border border-slate-700/70 rounded px-1 py-0.5`;
-                row.innerText = `S${strategyId} | 买入日 ${buyDay} | 持仓 ${(qty/100).toFixed(0)}手 | 可卖 ${(sellable/100).toFixed(0)}手 | 冻结 ${(locked/100).toFixed(0)}手 | 成本 ${unitCost.toFixed(3)}`;
+                row.innerText = `S${strategyId} | 买入日 ${buyDay} | 持仓 ${qty.toFixed(4)} 币 | 可卖 ${sellable.toFixed(4)} 币 | 冻结 ${locked.toFixed(4)} 币 | 成本 ${unitCost.toFixed(3)}`;
                 list.appendChild(row);
             });
         }
@@ -2891,7 +2909,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         async function resetFundPoolByUI() {
             const selected = String(liveFundPoolSelectedCode || fundPoolSelectedCodeFallback() || '').toUpperCase();
             if (!selected) {
-                logMessage('SYSTEM', '请先选择资金池标的', 'warning');
+                logMessage('SYSTEM', '请先选择交易对', 'warning');
                 return;
             }
             if (!window.confirm(`确认重置 ${selected} 的虚拟资金池吗？`)) return;
@@ -3389,22 +3407,22 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 fields: [
                     { path: 'system.mode', label: '运行模式', type: 'select', options: [{ value: 'backtest', label: '回测模式' }, { value: 'live', label: '实盘模式' }] },
                     { path: 'system.enable_live', label: '启用实盘', type: 'boolean' },
-                    { path: 'system.initial_capital', label: '系统初始资金', type: 'number', unit: '元', min: 10000, max: 100000000, step: 10000, slider: true },
+                    { path: 'system.initial_capital', label: '系统初始资金', type: 'number', unit: 'USDT', min: 10000, max: 100000000, step: 10000, slider: true },
                     { path: 'system.log_level', label: '日志级别', type: 'select', options: [{ value: 'DEBUG', label: '调试' }, { value: 'INFO', label: '信息' }, { value: 'WARNING', label: '警告' }, { value: 'ERROR', label: '错误' }] }
                 ]
             },
             {
-                title: '太子院标的池',
-                subtitle: '标的列表与监控对象',
+                title: '核心资产池',
+                subtitle: '交易对列表与监控对象',
                 fields: [
-                    { path: 'targets', label: '监控标的列表', type: 'lines', itemType: 'string', hint: '每行一个股票代码，例如 301227.SZ' }
+                    { path: 'targets', label: '监控交易对列表', type: 'lines', itemType: 'string', hint: '每行一个交易对，例如 BTCUSDT / ETHUSDT / SOLUSDT' }
                 ]
             },
             {
-                title: '工部数据源',
+                title: '数据中心',
                 subtitle: '主数据源与回退策略',
                 fields: [
-                    { path: 'data_provider.source', label: '主数据源', type: 'select', options: [{ value: 'default', label: 'default' }, { value: 'akshare', label: 'akshare' }, { value: 'tushare', label: 'tushare' }, { value: 'mysql', label: 'mysql' }, { value: 'postgresql', label: 'postgresql' }] },
+                    { path: 'data_provider.source', label: '主数据源', type: 'select', options: [{ value: 'binance', label: 'binance' }, { value: 'default', label: 'default' }, { value: 'akshare', label: 'akshare' }, { value: 'tushare', label: 'tushare' }, { value: 'mysql', label: 'mysql' }, { value: 'postgresql', label: 'postgresql' }] },
                     { path: 'data_provider.enable_fallback', label: '启用数据回退', type: 'boolean' },
                     { path: 'data_provider.backtest_cache_db_source', label: '回测缓存落库源', type: 'select', options: [{ value: '', label: '关闭' }, { value: 'mysql', label: 'mysql' }, { value: 'postgresql', label: 'postgresql' }] },
                     { path: 'data_provider.tushare_token', label: 'Tushare令牌', type: 'password', secret: true },
@@ -3452,7 +3470,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 ]
             },
             {
-                title: '工部增量同步',
+                title: '数据增量同步',
                 subtitle: '历史增量同步写入模式',
                 fields: [
                     { path: 'history_sync.write_mode', label: '写入模式', type: 'select', options: [{ value: 'api', label: 'api（写default_api_url）' }, { value: 'direct_db', label: 'direct_db（直连数据库）' }] },
@@ -3461,8 +3479,8 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                     { path: 'history_sync.lookback_days', label: '默认回看天数', type: 'number', min: 1, max: 3650, step: 1, slider: true },
                     { path: 'history_sync.custom_start_time', label: '自定义开始时间', type: 'text', placeholder: '例如：2026-03-01 09:30:00', desc: '格式：YYYY-MM-DD HH:MM:SS；time_mode=custom时生效' },
                     { path: 'history_sync.custom_end_time', label: '自定义结束时间', type: 'text', placeholder: '例如：2026-03-31 15:00:00', desc: '格式：YYYY-MM-DD HH:MM:SS；time_mode=custom时生效' },
-                    { path: 'history_sync.session_only', label: '仅交易时段(09:30-15:00)', type: 'boolean' },
-                    { path: 'history_sync.intraday_mode', label: '盘中窗口模式', type: 'boolean' },
+                    { path: 'history_sync.session_only', label: '仅交易时段(7x24)', type: 'boolean' },
+                    { path: 'history_sync.intraday_mode', label: '实时窗口模式', type: 'boolean' },
                     { path: 'history_sync.max_codes', label: '默认标的上限', type: 'number', min: 1, max: 50000, step: 1, slider: true },
                     { path: 'history_sync.batch_size', label: '默认分批条数', type: 'number', min: 1, max: 5000, step: 1, slider: true },
                     { path: 'history_sync.dry_run', label: '默认仅预演（不写库）', type: 'boolean', desc: '开启=只统计缺失与预计写入，不执行落库；关闭=真实写入数据库' }
@@ -3489,14 +3507,14 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 ]
             },
             {
-                title: '吏部策略编组',
+                title: '策略中心',
                 subtitle: '启用策略ID管理',
                 fields: [
                     { path: 'strategies.active_ids', label: '激活策略ID', type: 'lines', itemType: 'string', hint: '每行一个策略ID，例如 01' }
                 ]
             },
             {
-                title: '门下省合规',
+                title: '风险合规',
                 subtitle: '风控阈值配置',
                 fields: [
                     { path: 'risk_control.max_stop_loss_pct', label: '单笔最大止损', type: 'number', unit: '%', min: 0.001, max: 0.3, step: 0.001, slider: true, scale: 100 },
@@ -3506,7 +3524,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 ]
             },
             {
-                title: '刑部监察',
+                title: '监控审计',
                 subtitle: '强平与回撤限制参数',
                 fields: [
                     { path: 'risk_control.max_total_pos', label: '总仓位上限', type: 'number', unit: '%', min: 0.01, max: 1, step: 0.01, slider: true, scale: 100 },
@@ -3515,17 +3533,17 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 ]
             },
             {
-                title: '户部成本',
-                subtitle: '手续费与税费模型',
+                title: '交易成本',
+                subtitle: '手续费模型',
                 fields: [
                     { path: 'trading_cost.commission_rate', label: '手续费率', type: 'number', min: 0, max: 0.01, step: 0.00001, slider: true },
-                    { path: 'trading_cost.min_commission', label: '最低手续费', type: 'number', unit: '元', min: 0, max: 100, step: 0.1, slider: true },
-                    { path: 'trading_cost.stamp_duty', label: '印花税率', type: 'number', min: 0, max: 0.01, step: 0.00001, slider: true },
-                    { path: 'trading_cost.transfer_fee', label: '过户费率', type: 'number', min: 0, max: 0.001, step: 0.000001, slider: true }
+                    { path: 'trading_cost.min_commission', label: '最低手续费', type: 'number', unit: 'USDT', min: 0, max: 100, step: 0.1, slider: true },
+                    { path: 'trading_cost.stamp_duty', label: '卖出手续费', type: 'number', min: 0, max: 0.01, step: 0.00001, slider: true },
+                    { path: 'trading_cost.transfer_fee', label: 'Maker手续费', type: 'number', min: 0, max: 0.001, step: 0.000001, slider: true }
                 ]
             },
             {
-                title: '兵部执行',
+                title: '执行引擎',
                 subtitle: '成交滑点与执行偏差',
                 fields: [
                     { path: 'execution.slippage', label: '滑点比例', type: 'number', min: 0, max: 0.01, step: 0.0001, slider: true, scale: 100 }
@@ -3547,7 +3565,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                             { value: 'cash_pct', label: '按持有现金百分比' }
                         ]
                     },
-                    { path: 'strategy_params.common.order_qty', label: '默认下单数量', type: 'number', min: 100, max: 100000, step: 100, slider: true, desc: '固定数量模式下生效（单位：股）' },
+                    { path: 'strategy_params.common.order_qty', label: '默认下单数量', type: 'number', min: 100, max: 100000, step: 100, slider: true, desc: '固定数量模式下生效（单位：个）' },
                     { path: 'strategy_params.common.order_cash_pct', label: '现金下单比例', type: 'number', min: 0.1, max: 100, step: 0.1, slider: true, unit: '%', desc: '现金百分比模式下生效，10 表示 10%（也兼容 0.1 表示 10%）' }
                 ]
             },
@@ -3718,6 +3736,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 if (data.status === 'success') {
                     configDraft = data.config || configDraft;
                     applyConfigToBoards(configDraft);
+                    lastBoardConfigSyncAt = Date.now();
                 }
             } catch (_) {}
         }
@@ -4975,7 +4994,11 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 const progressVal = Number((data.progress || {}).progress || 0);
                 const isBacktestRunning = Boolean(data.is_running && String(data.active_cabinet_type || '').toLowerCase().includes('backtest'));
                 const successLike = ['success', 'succeeded', 'completed', 'done'].includes(reportStatus);
-                const stoppedLike = (!isBacktestRunning && progressVal >= 100) || (!data.is_running && reportStatus && reportStatus !== 'running');
+                const backendIdle = !isBacktestRunning && !data.is_running;
+                const stoppedLike =
+                    (!isBacktestRunning && progressVal >= 100)
+                    || (!data.is_running && reportStatus && reportStatus !== 'running')
+                    || backendIdle;
                 if (backtestBtnState === BACKTEST_BTN_STATE.running) {
                     if (reportStatus === 'failed' || reportError) {
                         setBacktestButtonState(BACKTEST_BTN_STATE.error);
@@ -4998,7 +5021,10 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 renderLiveStatus();
                 renderLiveExceptionPanel();
                 await refreshHistorySyncStatus();
-                await syncBoardConfig();
+                const needBoardSync = (Date.now() - Number(lastBoardConfigSyncAt || 0)) >= BOARD_CONFIG_SYNC_INTERVAL_MS;
+                if (!capitalInputFocused && needBoardSync) {
+                    await syncBoardConfig();
+                }
             } catch (_) {
             } finally {
                 statusSyncInFlight = false;
@@ -5203,6 +5229,15 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         async function fetchGlobalStrategies() {
             const preserveSelection = Array.isArray(strategyCatalog) && strategyCatalog.length > 0;
             try {
+                const res = await fetch('/api/strategies');
+                const data = await res.json();
+                if (data && data.status === 'success' && Array.isArray(data.strategies) && data.strategies.length) {
+                    latestStrategyScores = {};
+                    updateStrategyList(data.strategies, preserveSelection);
+                    return;
+                }
+            } catch (_) {}
+            try {
                 const res = await fetch('/api/strategy_manager/list?all=true');
                 const data = await res.json();
                 if (data && data.status === 'success' && Array.isArray(data.strategies) && data.strategies.length) {
@@ -5219,14 +5254,6 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                         .filter(row => String(row.id || '').trim());
                     latestStrategyScores = scoreMap;
                     updateStrategyList(strategies, preserveSelection);
-                    return;
-                }
-            } catch (_) {}
-            try {
-                const res = await fetch('/api/strategies');
-                const data = await res.json();
-                if (data && data.status === 'success' && Array.isArray(data.strategies) && data.strategies.length) {
-                    updateStrategyList(data.strategies, preserveSelection);
                     return;
                 }
             } catch (_) {}
@@ -5466,7 +5493,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             backtestStreamClosed = false;
             document.getElementById('bt-strategy-reports').innerHTML = '';
             
-            const code = normalizeCode(document.getElementById('stock-search-input').value || '600036.SH');
+            const code = normalizeCode(document.getElementById('stock-search-input').value || 'BTCUSDT');
             const picked = Array.isArray(selectedStrategyIds) ? selectedStrategyIds.slice() : [];
             if (!picked.length) {
                 logMessage('回测', '未选择策略，已取消回测提交', 'warning');
@@ -5549,8 +5576,9 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             return { start: fmt(start), end: fmt(end) };
         }
 
+        let klineForecastSeries = null;
         function ensureKlineChart() {
-            if (klineChart && klineCandlesSeries && klineVolumeSeries) return true;
+            if (klineChart && klineCandlesSeries && klineVolumeSeries && klineForecastSeries) return true;
             const container = document.getElementById('kline-modal-chart');
             if (!container || !window.LightweightCharts) return false;
             klineChart = LightweightCharts.createChart(container, {
@@ -5572,12 +5600,23 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 lastValueVisible: false,
                 priceLineVisible: false
             };
+            const forecastOpt = {
+                upColor: 'rgba(239, 68, 68, 0.4)',
+                downColor: 'rgba(34, 197, 94, 0.4)',
+                borderVisible: false,
+                wickUpColor: 'rgba(239, 68, 68, 0.4)',
+                wickDownColor: 'rgba(34, 197, 94, 0.4)',
+                lastValueVisible: false,
+                priceLineVisible: false
+            };
             if (typeof klineChart.addCandlestickSeries === 'function') {
                 klineCandlesSeries = klineChart.addCandlestickSeries(candleOpt);
                 klineVolumeSeries = klineChart.addHistogramSeries(volumeOpt);
+                klineForecastSeries = klineChart.addCandlestickSeries(forecastOpt);
             } else if (typeof klineChart.addSeries === 'function' && window.LightweightCharts?.CandlestickSeries && window.LightweightCharts?.HistogramSeries) {
                 klineCandlesSeries = klineChart.addSeries(LightweightCharts.CandlestickSeries, candleOpt);
                 klineVolumeSeries = klineChart.addSeries(LightweightCharts.HistogramSeries, volumeOpt);
+                klineForecastSeries = klineChart.addSeries(LightweightCharts.CandlestickSeries, forecastOpt);
             } else {
                 return false;
             }
@@ -5646,19 +5685,46 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             } catch (_) {}
         }
 
+        let activePriceLines = [];
         function renderKlineChartData(payload) {
             if (!ensureKlineChart()) return;
             setKlineRenderMode('chart');
             const candles = Array.isArray(payload?.candles) ? payload.candles : [];
             const volumes = Array.isArray(payload?.volumes) ? payload.volumes : [];
             const markers = Array.isArray(payload?.markers) ? payload.markers : [];
+            const priceLines = Array.isArray(payload?.price_lines) ? payload.price_lines : [];
+            const forecast = Array.isArray(payload?.forecast_candles) ? payload.forecast_candles : [];
+            
             if (!candles.length) return;
             klineCandlesSeries.setData(candles);
             klineVolumeSeries.setData(volumes);
+            if (klineForecastSeries) klineForecastSeries.setData(forecast);
+            
+            // Clear old price lines
+            if (activePriceLines && activePriceLines.length) {
+                activePriceLines.forEach(l => {
+                    try { klineCandlesSeries.removePriceLine(l); } catch(e) {}
+                });
+            }
+            activePriceLines = [];
+            
+            // Add new price lines
+            priceLines.forEach(l => {
+                try {
+                    const line = klineCandlesSeries.createPriceLine({
+                        price: l.price,
+                        color: l.color || '#3b82f6',
+                        lineWidth: 2,
+                        lineStyle: 2, // Dashed
+                        axisLabelVisible: true,
+                        title: l.label || '',
+                    });
+                    activePriceLines.push(line);
+                } catch(e) {}
+            });
+
             if (typeof klineCandlesSeries.setMarkers === 'function') {
                 klineCandlesSeries.setMarkers(markers);
-            } else if (typeof LightweightCharts?.createSeriesMarkers === 'function') {
-                LightweightCharts.createSeriesMarkers(klineCandlesSeries, markers);
             }
             klineChart.timeScale().fitContent();
             renderKlineLegend(payload?.strategies || []);
@@ -5725,7 +5791,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         }
 
         function buildBacktestChartCtxFromForm() {
-            const code = normalizeCode(document.getElementById('stock-search-input')?.value || '600036.SH');
+            const code = normalizeCode(document.getElementById('stock-search-input')?.value || 'BTCUSDT');
             const range = document.getElementById('bt-range-select')?.value || '1y';
             let dates = null;
             if (range === 'custom') {
@@ -5809,7 +5875,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             if (endInput) endInput.value = String(item.end || '');
             persistConsoleState();
             closePatternPicker();
-            logMessage('SYSTEM', `已选择经典形态：${item.patternName}（${item.stockCode} ${item.start}~${item.end}）`, 'system');
+            logMessage('SYSTEM', `已选择加密预设：${item.patternName}（${item.stockCode} ${item.start}~${item.end}）`, 'system');
             scheduleStrategyRegimeHintRefresh(true);
         }
 
@@ -5825,8 +5891,8 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                     <img id="pattern-kline-${item.id}" src="${getPatternThumbUrl(item)}" class="w-full h-[110px] object-cover bg-slate-950 border border-slate-700 rounded" alt="${item.patternName}" />
                     <div class="text-[10px] text-slate-400 leading-4">
                         <div>形态名称：${item.patternName}</div>
-                        <div>股票名称：${item.stockName}</div>
-                        <div>股票代码：${item.stockCode}</div>
+                        <div>资产名称：${item.stockName}</div>
+                        <div>交易对：${item.stockCode}</div>
                         <div>开始日期：${item.start}</div>
                         <div>结束日期：${item.end}</div>
                     </div>
@@ -6030,7 +6096,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 return `<ul class="list-disc pl-5 space-y-1 text-slate-300 text-xs">${list.map(x => `<li>${x}</li>`).join('')}</ul>`;
             };
             if (strategyId === 'all') {
-                const ids = ['01','02','03','04','05','06','07','08','09'];
+                const ids = ['10','11','12','13','14'];
                 target.innerHTML = ids.map(id => {
                     const d = STRATEGY_GUIDE[id];
                     return `<div class="bg-slate-800/70 border border-slate-700 rounded p-3">
@@ -6056,6 +6122,95 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 <div class="text-slate-300 text-sm mt-3"><span class="text-slate-400">说明：</span>${d.note || '--'}</div>
                 <div class="text-slate-300 text-sm mt-2"><span class="text-slate-400">示例：</span>${d.example || '--'}</div>
             </div>`;
+        }
+
+        function directionBadge(direction) {
+            const d = String(direction || '').toUpperCase();
+            if (d === 'LONG') return { label: '偏多', cls: 'border-emerald-500 text-emerald-300 bg-emerald-950/30' };
+            if (d === 'LIGHT_LONG') return { label: '轻多', cls: 'border-cyan-500 text-cyan-300 bg-cyan-950/30' };
+            if (d === 'DEFENSIVE') return { label: '防守', cls: 'border-rose-500 text-rose-300 bg-rose-950/30' };
+            return { label: '观望', cls: 'border-amber-500 text-amber-300 bg-amber-950/30' };
+        }
+
+        function renderCryptoMarketPanel(panel) {
+            cryptoMarketPanelSnapshot = panel || null;
+            const regimeEl = document.getElementById('crypto-market-regime');
+            const gridEl = document.getElementById('crypto-market-grid');
+            const noteEl = document.getElementById('crypto-market-engine-note');
+            if (!regimeEl || !gridEl || !noteEl) return;
+            const items = Array.isArray(panel?.items) ? panel.items : [];
+            regimeEl.innerText = `${String(panel?.market_regime || '--')} · 总分 ${Number(panel?.market_score || 0).toFixed(1)}`;
+            noteEl.innerText = Array.isArray(panel?.engine?.notes) && panel.engine.notes.length
+                ? panel.engine.notes[0]
+                : '--';
+            if (!items.length) {
+                gridEl.innerHTML = '<div class="bg-slate-950 border border-slate-800 rounded p-2 text-[10px] text-slate-400 col-span-3">暂无市场分析数据</div>';
+                return;
+            }
+            
+            gridEl.innerHTML = items.map(item => {
+                const badge = directionBadge(item.direction);
+                const metrics = item.metrics || {};
+                const strategies = Array.isArray(item.top_strategies) && item.top_strategies.length ? item.top_strategies.join(' / ') : '--';
+                return `<div class="relative group">
+                    <button onclick="setQuickPair('${String(item.symbol || 'BTCUSDT')}')" class="w-full text-left bg-slate-950 border border-slate-800 hover:border-cyan-500 rounded p-2 transition-colors">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="text-white font-bold text-xs">${String(item.symbol || '--')}</div>
+                            <span class="px-1.5 py-0.5 rounded border text-[10px] ${badge.cls}">${badge.label}</span>
+                        </div>
+                        <div class="mt-1 text-[10px] text-slate-400">置信度 <span class="text-white">${Number(item.confidence || 0)}</span> · 仓位 <span class="text-white">${Number(item.position_pct || 0)}%</span></div>
+                        <div class="text-[10px] text-slate-500 mt-1">7日 ${(Number(metrics.ret_7d || 0) * 100).toFixed(2)}% · 30日 ${(Number(metrics.ret_30d || 0) * 100).toFixed(2)}%</div>
+                        <div class="text-[10px] text-slate-500">ATR ${(Number(metrics.atr_pct || 0) * 100).toFixed(2)}% · RSI ${Number(metrics.h1_rsi || 0).toFixed(1)}</div>
+                        <div class="text-[10px] text-slate-300 mt-1">${String(item.summary || '--')}</div>
+                        <div class="text-[10px] text-amber-300 mt-1">优先策略 ${strategies}</div>
+                    </button>
+                    <button onclick="openLiveKlineModal('${String(item.symbol || 'BTCUSDT')}')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-slate-800/80 hover:bg-slate-700 text-cyan-400 p-1.5 rounded transition-opacity shadow-lg z-10">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </button>
+                </div>`;
+            }).join('');
+            return; // Skip the old map block
+
+
+            const leader = panel?.leader || items[0];
+            if (leader) {
+                const selectedText = `${String(leader.symbol || '--')} · ${directionBadge(leader.direction).label} · 建议仓位 ${Number(leader.position_pct || 0)}%`;
+                const temp = document.getElementById('rites-market-temp');
+                if (temp) temp.innerText = `⚡ ${selectedText}`;
+                const compliance = document.getElementById('rites-compliance-status');
+                if (compliance) {
+                    compliance.innerText = String(leader.risk_hint || '--');
+                    compliance.className = leader.risk_level === 'HIGH' ? 'text-trading-red' : 'text-trading-green';
+                }
+                const mainStrategy = document.getElementById('personnel-main-strategy');
+                if (mainStrategy) {
+                    const sid = Array.isArray(leader.top_strategies) && leader.top_strategies.length ? leader.top_strategies[0] : '--';
+                    mainStrategy.innerText = sid === '--' ? '--' : (STRATEGY_GUIDE[sid]?.name || sid);
+                }
+                const availablePos = document.getElementById('personnel-available-pos');
+                if (availablePos) availablePos.innerText = `${Number(leader.position_pct || 0).toFixed(1)}%`;
+                const actionEl = document.getElementById('war-action');
+                if (actionEl) {
+                    const dirLabel = directionBadge(leader.direction).label;
+                    actionEl.innerText = dirLabel;
+                    actionEl.className = `font-bold ${leader.direction === 'DEFENSIVE' ? 'text-trading-red' : 'text-trading-green'}`;
+                }
+            }
+        }
+
+        async function fetchCryptoMarketPanel(force = false) {
+            try {
+                const res = await fetch('/api/crypto/market_panel?symbols=BTCUSDT,ETHUSDT,SOLUSDT');
+                const data = await res.json();
+                if (!res.ok || data.status !== 'success') throw new Error(data.msg || '市场分析失败');
+                renderCryptoMarketPanel(data);
+                if (force && data.leader) {
+                    logMessage('系统', `市场方向刷新：${data.leader.symbol} ${directionBadge(data.leader.direction).label} · 置信度 ${data.leader.confidence}`, 'system');
+                }
+            } catch (e) {
+                const noteEl = document.getElementById('crypto-market-engine-note');
+                if (noteEl) noteEl.innerText = `市场分析暂不可用: ${e}`;
+            }
         }
 
         function updateStrategyQuick(strategyId) {
@@ -6223,7 +6378,8 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
 
             const best = data.ranking[0];
             if (best) {
-                document.getElementById('bt-best-strat').innerText = `[${best.strategy_id}]`;
+                const bestName = (STRATEGY_GUIDE[best.strategy_id] || { name: best.strategy_id }).name;
+                document.getElementById('bt-best-strat').innerText = bestName;
                 document.getElementById('bt-calmar').innerText = parseFloat(best.calmar).toFixed(2);
                 document.getElementById('bt-roi').innerText = (parseFloat(best.annualized_roi) * 100).toFixed(2) + '%';
             }
@@ -6241,9 +6397,10 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 if(row.rating.includes('A')) ratingColor = 'text-trading-green font-bold';
                 if(row.rating.includes('S')) ratingColor = 'text-trading-yellow font-bold text-lg';
                 
+                const stratName = (STRATEGY_GUIDE[row.strategy_id] || { name: row.strategy_id }).name;
                 tr.innerHTML = `
                     <td class="px-3 py-2 text-slate-400">#${row.rank}</td>
-                    <td class="px-3 py-2 font-bold text-white">${row.strategy_id}</td>
+                    <td class="px-3 py-2 font-bold text-white max-w-[150px] truncate" title="${stratName}">${stratName}</td>
                     <td class="px-3 py-2 text-slate-300">${toZhTimeframe((STRATEGY_GUIDE[row.strategy_id] || STRATEGY_GUIDE.all).trigger || '--')}</td>
                     <td class="px-3 py-2 ${ratingColor}">${row.rating}</td>
                     <td class="px-3 py-2 text-trading-yellow">${(row.annualized_roi * 100).toFixed(2)}%</td>
@@ -6276,12 +6433,13 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 .forEach(r => {
                     const card = document.createElement('div');
                     card.className = 'bg-slate-800/50 border border-slate-700 rounded p-3 text-xs font-mono';
+                    const stratName = (STRATEGY_GUIDE[r.strategy_id] || { name: `策略 ${r.strategy_id}` }).name;
                     card.innerHTML = `
-                        <div class="text-white font-bold mb-2">策略 ${r.strategy_id}</div>
+                        <div class="text-white font-bold mb-2">${stratName}</div>
                         <div class="text-slate-300">使用数据周期：${toZhTimeframe((STRATEGY_GUIDE[r.strategy_id] || STRATEGY_GUIDE.all).trigger || '--')}</div>
                         <div class="text-slate-300">回测周期：${r.start_date} ~ ${r.end_date}</div>
-                        <div class="text-slate-300">初始资金：${Number(r.init_capital).toFixed(2)} 元</div>
-                        <div class="text-slate-300">结束资金：${Number(r.end_capital).toFixed(2)} 元</div>
+                        <div class="text-slate-300">初始资金：${Number(r.init_capital).toFixed(2)} USDT</div>
+                        <div class="text-slate-300">结束资金：${Number(r.end_capital).toFixed(2)} USDT</div>
                         <div class="text-slate-300">总收益：${(Number(r.total_return) * 100).toFixed(2)}%</div>
                         <div class="text-slate-300">年化收益：${(Number(r.annual_return) * 100).toFixed(2)}%</div>
                         <div class="text-slate-300">最大回撤：${(Number(r.max_drawdown) * 100).toFixed(2)}%</div>
@@ -6322,6 +6480,21 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             el.className = 'flex gap-2 animate-pulse';
             const moduleText = String(module || '') === 'SYSTEM' ? '系统' : module;
             const moduleColorMap = {
+                '策略决策中心': 'text-trading-blue',
+                '风控审计中心': 'text-trading-yellow',
+                '指令执行中心': 'text-trading-red',
+                '策略管理': 'text-purple-400',
+                '资产结算': 'text-trading-yellow',
+                '合规与风控': 'text-blue-400',
+                '实时操盘': 'text-red-500',
+                '违规审计': 'text-orange-500',
+                '基础支撑': 'text-cyan-400',
+                '策略中心': 'text-trading-blue',
+                '风控中心': 'text-trading-yellow',
+                '执行中心': 'text-trading-red',
+                '系统': 'text-trading-blue'
+            };
+            const aliasColorMap = {
                 '中书省': 'text-trading-blue',
                 '门下省': 'text-trading-yellow',
                 '尚书省': 'text-trading-red',
@@ -6330,20 +6503,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
                 '礼部': 'text-blue-400',
                 '兵部': 'text-red-500',
                 '刑部': 'text-orange-500',
-                '工部': 'text-cyan-400',
-                '太子院': 'text-indigo-400',
-                '系统': 'text-trading-blue'
-            };
-            const aliasColorMap = {
-                '策略中心': 'text-trading-blue',
-                '策略研究中心': 'text-trading-blue',
-                '风控中心': 'text-trading-yellow',
-                '风控审核中心': 'text-trading-yellow',
-                '执行中心': 'text-trading-red',
-                '指令执行中心': 'text-trading-red',
-                '资金中心': 'text-purple-400',
-                '数据中心': 'text-cyan-400',
-                '合规中心': 'text-blue-400'
+                '工部': 'text-cyan-400'
             };
             const resolveModuleColor = (name) => {
                 if (moduleColorMap[name]) return moduleColorMap[name];
@@ -6420,7 +6580,10 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         document.getElementById('bt-start-date')?.addEventListener('change', () => scheduleStrategyRegimeHintRefresh(true));
         document.getElementById('bt-end-date')?.addEventListener('change', () => scheduleStrategyRegimeHintRefresh(true));
         document.getElementById('bt-capital-input')?.addEventListener('input', persistConsoleState);
+        document.getElementById('bt-capital-input')?.addEventListener('focus', () => { capitalInputFocused = true; });
+        document.getElementById('bt-capital-input')?.addEventListener('blur', () => { capitalInputFocused = false; });
         setInterval(() => scheduleStrategyRegimeHintRefresh(false), 60000);
+        setInterval(() => fetchCryptoMarketPanel(false), 60000);
         setInterval(() => {
             const modal = document.getElementById('webhook-retry-modal');
             if (modal && !modal.classList.contains('hidden')) {
@@ -6431,6 +6594,7 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
             syncStatus();
         }, 3000);
         scheduleStrategyRegimeHintRefresh(true);
+        fetchCryptoMarketPanel(true);
         setTimeout(() => {
             if (!strategyCatalog.length) fetchGlobalStrategies();
         }, 800);
@@ -6439,6 +6603,75 @@ class GeneratedStrategyTemplate(BaseImplementedStrategy):
         updateConfidenceScore();
         updateRevenueCashRatioBar();
         persistConsoleState();
+
+
+        let currentLiveSymbol = null;
+        let currentLiveInterval = '1h';
+
+        async function openLiveKlineModal(symbol, interval = '1h') {
+            currentLiveSymbol = symbol;
+            currentLiveInterval = interval;
+            klineModalOpened = true;
+            document.getElementById('kline-modal')?.classList.remove('hidden'); document.getElementById('kline-modal')?.classList.add('flex');
+            
+            const title = document.getElementById('kline-modal-title');
+            if (title) title.innerHTML = `<span class="text-cyan-400">● LIVE</span> ${symbol}`;
+            
+            const badge = document.getElementById('kline-modal-period-badge');
+            if (badge) badge.innerText = `周期: ${interval.toUpperCase()}`;
+            
+            // Add interval switcher to the modal header if not already there
+            let switcher = document.getElementById('kline-live-switcher');
+            if (!switcher) {
+                const header = document.querySelector('#kline-modal .p-3.border-b');
+                if (header) {
+                    switcher = document.createElement('div');
+                    switcher.id = 'kline-live-switcher';
+                    switcher.className = 'flex items-center bg-slate-950 rounded p-0.5 border border-slate-800 ml-4';
+                    switcher.innerHTML = `
+                        <button onclick="switchLiveInterval('1h')" id="btn-1h" class="px-2 py-0.5 text-[10px] rounded transition">1H</button>
+                        <button onclick="switchLiveInterval('4h')" id="btn-4h" class="px-2 py-0.5 text-[10px] rounded transition">4H</button>
+                        <button onclick="switchLiveInterval('1d')" id="btn-1d" class="px-2 py-0.5 text-[10px] rounded transition">1D</button>
+                    `;
+                    header.insertBefore(switcher, header.querySelector('button'));
+                }
+            }
+            updateLiveSwitcherUI(interval);
+
+            try {
+                await setKlineModalLoading(true, '正在获取交易所实时数据...');
+                const res = await fetch(`/api/crypto/kline_data?symbol=${symbol}&interval=${interval}`);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    renderKlineChartData(data);
+                } else {
+                    logMessage('系统', `获取行情失败: ${data.msg}`, 'danger');
+                }
+                await setKlineModalLoading(false);
+            } catch (e) {
+                logMessage('系统', `获取行情异常: ${e}`, 'danger');
+                await setKlineModalLoading(false);
+            }
+        }
+
+        function updateLiveSwitcherUI(interval) {
+            ['1h', '4h', '1d'].forEach(i => {
+                const btn = document.getElementById(`btn-${i}`);
+                if (btn) {
+                    if (i === interval) {
+                        btn.className = 'px-2 py-0.5 text-[10px] rounded transition bg-slate-800 text-cyan-400';
+                    } else {
+                        btn.className = 'px-2 py-0.5 text-[10px] rounded transition text-slate-500 hover:text-slate-300';
+                    }
+                }
+            });
+        }
+
+        function switchLiveInterval(interval) {
+            if (currentLiveSymbol) {
+                openLiveKlineModal(currentLiveSymbol, interval);
+            }
+        }
 
     </script>
 </body>

@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="./logo.png" alt="金策智算 Logo" width="140" />
-  <h1>金策智算 · 智能投研决策系统</h1>
-  <p>基于唐朝的三省六部制度建立的量化系统，分权协同、风控闭环、强化回测与执行。</p>
+  <img src="./logo.png" alt="白鹿智算 Logo" width="140" />
+  <h1>白鹿智算 · 数字资产决策引擎</h1>
+  <p>面向数字资产市场的策略研究与执行系统，聚焦 BTC、ETH、SOL 等主流资产的回测、风控与方向决策。</p>
 </div>
 
 <p align="center">
@@ -9,7 +9,7 @@
   <img alt="Framework" src="https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white" />
   <img alt="Frontend" src="https://img.shields.io/badge/UI-Dashboard-0A66C2?logo=googlechrome&logoColor=white" />
   <img alt="Status" src="https://img.shields.io/badge/Status-Active-success" />
-  <img alt="Market" src="https://img.shields.io/badge/Market-A--Share-red" />
+  <img alt="Market" src="https://img.shields.io/badge/Market-Crypto-orange" />
 </p>
 
 ## 目录
@@ -29,7 +29,7 @@
 
 ## 项目简介
 
-本项目采用“三省六部”思想构建量化系统，把**策略生成、风控审核、执行清算**分层解耦，支持A股以下核心场景：
+本项目采用“三省六部”思想构建量化系统，把**策略生成、风控审核、执行清算**分层解耦，当前已聚焦数字资产交易场景，支持以下核心场景：
 
 - 历史回测与报告输出
 - 实盘监控与风控拦截
@@ -250,8 +250,8 @@ python server.py
 - MySQL 落库使用 `ON DUPLICATE KEY UPDATE`，目标表需具备可触发冲突更新的唯一键（建议 `(code, trade_time)`）。
 - 增量同步时间窗口新增两种模式：`history_sync.time_mode=lookback`（按 `lookback_days` 回看最近 N 天）与 `history_sync.time_mode=custom`（使用 `custom_start_time/custom_end_time` 固定区间）。
 - 当请求或配置中显式传入 `start_time/end_time` 时，优先使用显式时间，`time_mode` 仅在未显式传时间时生效。
-- `history_sync.intraday_mode=true` 时，未显式传时间将使用“当日（或最近交易日）09:30:00~15:00:00”窗口；默认建议关闭，仅在盘中补数场景启用。
-- `history_sync.session_only=true`（默认）时，分钟线源数据会过滤为交易时段 `09:30:00~15:00:00`，避免写入非交易分钟。
+- `history_sync.intraday_mode=true` 时，未显式传时间将使用“当日（或最近交易日）00:00:00~23:59:59”窗口；默认建议关闭，仅在盘中补数场景启用。
+- `history_sync.session_only=true`（默认）时，分钟线源数据会过滤为交易时段 `00:00:00~23:59:59`，避免写入非交易分钟。
 
 #### 增量同步时间配置示例
 
@@ -273,15 +273,15 @@ python server.py
 #### 自定义开始/结束时间窗模板写法
 
 - 固定格式：`YYYY-MM-DD HH:MM:SS`
-- 推荐边界：开始时间写 `09:30:00`，结束时间写 `15:00:00`
+- 推荐边界：开始时间写 `00:00:00`，结束时间写 `23:59:59`
 - 生效前提：`time_mode` 必须是 `custom`
 - 优先级：若同时传了 `start_time/end_time`，则以 `start_time/end_time` 为准
 
 ```json
 "history_sync": {
   "time_mode": "custom",
-  "custom_start_time": "2026-03-01 09:30:00",
-  "custom_end_time": "2026-03-31 15:00:00",
+  "custom_start_time": "2026-03-01 00:00:00",
+  "custom_end_time": "2026-03-31 23:59:59",
   "session_only": true,
   "intraday_mode": false
 }
@@ -292,8 +292,8 @@ python server.py
 ```json
 {
   "time_mode": "custom",
-  "custom_start_time": "2026-03-01 09:30:00",
-  "custom_end_time": "2026-03-31 15:00:00",
+  "custom_start_time": "2026-03-01 00:00:00",
+  "custom_end_time": "2026-03-31 23:59:59",
   "session_only": true,
   "intraday_mode": false
 }
@@ -360,7 +360,7 @@ python server.py
 
 **免责声明**
 - 本项目仅用于量化回测、本地数据处理与技术研究。
-- 不构成投资建议，不荐股，不承诺收益。
+- 不构成投资建议，不荐币，不承诺收益。
 - 使用本项目产生的一切风险（包括但不限于投资损失、数据损失、业务中断）由使用者自行承担。
 
 > 详细条款请见仓库根目录 `LICENSE` 文件；如与商业协议冲突，以商业协议为准。

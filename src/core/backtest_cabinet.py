@@ -18,6 +18,7 @@ from src.strategies.strategy_factory import create_strategies
 from src.utils.data_provider import DataProvider
 from src.utils.tushare_provider import TushareProvider
 from src.utils.akshare_provider import AkshareProvider
+from src.utils.binance_provider import BinanceProvider
 from src.utils.mysql_provider import MysqlProvider
 from src.utils.postgres_provider import PostgresProvider
 from src.utils.config_loader import ConfigLoader
@@ -120,6 +121,8 @@ class BacktestCabinet:
         return x
 
     def _build_provider(self, source):
+        if source == 'binance':
+            return BinanceProvider()
         if source == 'tushare':
             return TushareProvider(token=self.config.get("data_provider.tushare_token"))
         if source == 'akshare':
@@ -189,6 +192,11 @@ class BacktestCabinet:
                 if bar:
                     return True, "ok"
                 return False, "akshare 连通性检查失败（未返回最新行情）"
+            if provider_source == "binance":
+                bar = provider.get_latest_bar(self.stock_code)
+                if bar:
+                    return True, "ok"
+                return False, "binance 连通性检查失败（未返回最新行情）"
             if provider_source == "default":
                 if hasattr(provider, "_request_get") and hasattr(provider, "_code_variants"):
                     now = datetime.now()
@@ -234,7 +242,7 @@ class BacktestCabinet:
             if account is None:
                 continue
             for code, pos in list(stocks.items()):
-                qty = int(pos.get("qty", 0) or 0)
+                qty = float(pos.get("qty", 0) or 0)
                 if qty <= 0:
                     continue
                 order = {
@@ -303,7 +311,7 @@ class BacktestCabinet:
             if account is None:
                 continue
             for code, pos in list(stocks.items()):
-                qty = int(pos.get("qty", 0) or 0)
+                qty = float(pos.get("qty", 0) or 0)
                 if qty <= 0:
                     continue
                 order = {
@@ -479,7 +487,15 @@ class BacktestCabinet:
                 })
                 return
             await self._emit('backtest_flow', {'module': '工部', 'level': 'success', 'msg': f'数据源连通性检查通过: {provider_source}'})
-            df = self._cache_get(start_date, end_date, "1min", provider_source)
+            strategy_trigger_tf = {s.id: self._normalize_trigger_tf(getattr(s, "trigger_timeframe", "1min")) for s in self.strategies}
+            unique_tfs = sorted(set(strategy_trigger_tf.values()))
+            if len(unique_tfs) == 1:
+                base_interval = unique_tfs[0]
+            elif strategy_trigger_tf and all(tf == "D" for tf in strategy_trigger_tf.values()):
+                base_interval = "D"
+            else:
+                base_interval = "1min"
+            df = self._cache_get(start_date, end_date, base_interval, provider_source)
             if df.empty:
                 await self._emit('backtest_progress', {
                     'progress': 6,
@@ -487,9 +503,12 @@ class BacktestCabinet:
                     'phase_label': '拉取历史K线',
                     'current_date': f'{start_date.date()} ~ {end_date.date()}'
                 })
-                await self._emit('backtest_flow', {'module': '工部', 'level': 'system', 'msg': f'数据获取阶段：拉取历史K线 {start_date.date()}~{end_date.date()}'})
+                await self._emit('backtest_flow', {'module': '工部', 'level': 'system', 'msg': f'数据获取阶段：拉取{base_interval}历史K线 {start_date.date()}~{end_date.date()}'})
                 await self._yield_control(0.01)
-                df = await asyncio.to_thread(provider.fetch_minute_data, self.stock_code, start_date, end_date)
+                if hasattr(provider, "fetch_kline_data"):
+                    df = await asyncio.to_thread(provider.fetch_kline_data, self.stock_code, start_date, end_date, base_interval)
+                else:
+                    df = await asyncio.to_thread(provider.fetch_minute_data, self.stock_code, start_date, end_date)
                 if df.empty and enable_fallback:
                     token = self.config.get("data_provider.tushare_token")
                     if token and provider_source != 'tushare':
@@ -503,7 +522,7 @@ class BacktestCabinet:
                         await self._emit('backtest_flow', {'module': '工部', 'level': 'warning', 'msg': '数据获取阶段：主源无数据，切换 Tushare'})
                         await self._yield_control(0.01)
                         try:
-                            df = await asyncio.to_thread(TushareProvider(token=token).fetch_minute_data, self.stock_code, start_date, end_date)
+                            df = await asyncio.to_thread(TushareProvider(token=token).fetch_kline_data, self.stock_code, start_date, end_date, base_interval)
                         except Exception:
                             df = pd.DataFrame()
                 if df.empty and enable_fallback and provider_source != 'akshare':
@@ -517,7 +536,7 @@ class BacktestCabinet:
                     await self._emit('backtest_flow', {'module': '工部', 'level': 'warning', 'msg': '数据获取阶段：Tushare 无数据，切换 Akshare'})
                     await self._yield_control(0.01)
                     try:
-                        df = await asyncio.to_thread(AkshareProvider().fetch_minute_data, self.stock_code, start_date, end_date)
+                        df = await asyncio.to_thread(AkshareProvider().fetch_kline_data, self.stock_code, start_date, end_date, base_interval)
                     except Exception:
                         df = pd.DataFrame()
                 if df.empty:
@@ -541,8 +560,8 @@ class BacktestCabinet:
                     'current_date': f'{start_date.date()} ~ {end_date.date()}'
                 })
                 await self._emit('backtest_flow', {'module': '工部', 'level': 'system', 'msg': '数据获取阶段：数据清洗完成，写入缓存'})
-                self._cache_set(start_date, end_date, "1min", provider_source, df)
-                await self._persist_backtest_cache_to_db(df, "1min", provider_source)
+                self._cache_set(start_date, end_date, base_interval, provider_source, df)
+                await self._persist_backtest_cache_to_db(df, base_interval, provider_source)
             else:
                 await self._emit('backtest_progress', {
                     'progress': 12,
@@ -561,14 +580,13 @@ class BacktestCabinet:
             total_bars = len(df)
             perf_data_fetch_ms = int((perf_counter() - stage_started_at) * 1000)
             await self._emit('system', {'msg': f"已获取 {total_bars} 条K线数据，正在初始化策略..."})
-            await self._emit('backtest_flow', {'module': '工部', 'level': 'system', 'msg': f'数据清洗完成，共 {total_bars} 条分钟K线'})
+            await self._emit('backtest_flow', {'module': '工部', 'level': 'system', 'msg': f'数据清洗完成，共 {total_bars} 条{base_interval}K线'})
             day_end_dt_set = set(pd.to_datetime(df.groupby(df["dt"].dt.date)["dt"].max()).tolist())
             final_bar_dt = pd.to_datetime(df.iloc[-1]["dt"])
             for strategy in self.strategies:
                 strategy.set_backtest_context(final_bar_dt=final_bar_dt)
             stage_started_at = perf_counter()
-            strategy_trigger_tf = {s.id: self._normalize_trigger_tf(getattr(s, "trigger_timeframe", "1min")) for s in self.strategies}
-            needed_timeframes = sorted(set([tf for tf in strategy_trigger_tf.values() if tf != "1min"]))
+            needed_timeframes = sorted(set([tf for tf in strategy_trigger_tf.values() if tf != base_interval]))
             tf_dt_sets = {}
             tf_row_maps = {}
             tf_date_row_maps = {}
@@ -639,7 +657,7 @@ class BacktestCabinet:
                 runnable_strategy_ids = []
                 strategy_kline_map = {}
                 for sid, tf in strategy_trigger_tf.items():
-                    if tf == "1min":
+                    if tf == base_interval:
                         runnable_strategy_ids.append(sid)
                         strategy_kline_map[sid] = kline
                     elif tf == "D":
@@ -692,7 +710,7 @@ class BacktestCabinet:
                         'macd': float(macd_series.iloc[i]),
                         'rsi': float(rsi_series.iloc[i]),
                         'time': str(kline['dt']),
-                        'kline_timeframe': '1分钟驱动',
+                        'kline_timeframe': '日线驱动' if base_interval == 'D' else (f'{base_interval}驱动' if base_interval != '1min' else '1分钟驱动'),
                         'kline_dt': str(kline['dt']),
                         'strategy_timeframes': strategy_trigger_tf,
                         'runnable_strategy_ids': runnable_strategy_ids,

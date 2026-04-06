@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>回测报告中心</title>
+    <title>白鹿智算 · 回测报告中心</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
@@ -21,9 +21,10 @@
 <body class="bg-slate-950 text-slate-100 min-h-screen">
     <div class="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
-            <h1 class="text-2xl font-bold"><i class="fa-solid fa-chart-line text-blue-400 mr-2"></i>回测报告中心</h1>
+            <h1 class="text-2xl font-bold"><i class="fa-solid fa-chart-line text-blue-400 mr-2"></i>白鹿智算 · 回测报告中心</h1>
             <div class="flex items-center gap-2 w-full sm:w-auto">
                 <button id="refresh-btn" class="text-sm bg-blue-700 hover:bg-blue-600 px-3 py-2 rounded border border-blue-600 w-1/2 sm:w-auto whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 active:scale-95">刷新报告</button>
+                <button id="clear-all-btn" class="text-sm bg-rose-700 hover:bg-rose-600 px-3 py-2 rounded border border-rose-600 w-1/2 sm:w-auto whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 active:scale-95">清空全部</button>
                 <a href="/" class="text-sm bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded border border-slate-700 text-center w-1/2 sm:w-auto whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 active:scale-95">返回控制台</a>
             </div>
         </div>
@@ -273,6 +274,21 @@
                 await loadHistory();
                 await loadReport(currentReportId || null);
             } catch (_) {}
+        }
+
+        async function clearAllReports() {
+            const ok = window.confirm('确认清空全部回测报告吗？这个操作不能撤销。');
+            if (!ok) return;
+            try {
+                const res = await fetch('/api/report/clear', { method: 'POST' });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.msg || '清空失败');
+                currentReportId = null;
+                await loadHistory();
+                await loadReport(null);
+            } catch (e) {
+                window.alert(`清空失败：${e}`);
+            }
         }
 
         function renderSummary(summary) {
@@ -634,6 +650,7 @@
         }
 
         document.getElementById('refresh-btn').addEventListener('click', refreshAll);
+        document.getElementById('clear-all-btn').addEventListener('click', clearAllReports);
         document.getElementById('history-list').addEventListener('click', async (e) => {
             const target = e.target.closest('button[data-rid]');
             if (!target) return;

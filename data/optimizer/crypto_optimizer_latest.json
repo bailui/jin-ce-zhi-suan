@@ -1,0 +1,695 @@
+{
+  "status": "success",
+  "generated_at": "2026-04-06T03:31:42.825921",
+  "days": 120,
+  "capital": 200000.0,
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT"
+  ],
+  "top_results": [
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 18,
+        "atr_stop_mult": 2.0
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.0
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.0
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.0
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 18,
+        "atr_stop_mult": 2.2
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.2
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.2
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.2
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 18,
+        "atr_stop_mult": 2.6
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.6
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.6
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.6
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 20,
+        "atr_stop_mult": 2.0
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.0
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.0
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.0
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 20,
+        "atr_stop_mult": 2.2
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.2
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.2
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.2
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 20,
+        "atr_stop_mult": 2.6
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.6
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.6
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 20,
+            "atr_stop_mult": 2.6
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 24,
+        "atr_stop_mult": 2.0
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.0
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.0
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.0
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 24,
+        "atr_stop_mult": 2.2
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.2
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.2
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.2
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 24,
+        "atr_stop_mult": 2.6
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.6
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.6
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 24,
+            "atr_stop_mult": 2.6
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    {
+      "strategy_id": "12",
+      "params": {
+        "atr_band_mult": 2.4,
+        "entry_rsi_min": 52,
+        "exit_rsi_min": 42
+      },
+      "score": -12.0,
+      "avg_win_rate": 0.0,
+      "avg_annualized_roi": 0.0,
+      "avg_max_dd": 0.0,
+      "avg_trades": 0.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "12",
+          "params": {
+            "atr_band_mult": 2.4,
+            "entry_rsi_min": 52,
+            "exit_rsi_min": 42
+          },
+          "score": -12.0,
+          "annualized_roi": 0.0,
+          "win_rate": 0.0,
+          "max_dd": -0.0,
+          "total_trades": 0,
+          "rating": "C"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "12",
+          "params": {
+            "atr_band_mult": 2.4,
+            "entry_rsi_min": 52,
+            "exit_rsi_min": 42
+          },
+          "score": -12.0,
+          "annualized_roi": 0.0,
+          "win_rate": 0.0,
+          "max_dd": -0.0,
+          "total_trades": 0,
+          "rating": "C"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "12",
+          "params": {
+            "atr_band_mult": 2.4,
+            "entry_rsi_min": 52,
+            "exit_rsi_min": 42
+          },
+          "score": -12.0,
+          "annualized_roi": 0.0,
+          "win_rate": 0.0,
+          "max_dd": -0.0,
+          "total_trades": 0,
+          "rating": "C"
+        }
+      ]
+    }
+  ],
+  "best_by_strategy": {
+    "11": {
+      "strategy_id": "11",
+      "params": {
+        "breakout_lookback": 18,
+        "atr_stop_mult": 2.0
+      },
+      "score": 71.2353,
+      "avg_win_rate": 0.711,
+      "avg_annualized_roi": 0.4734,
+      "avg_max_dd": -0.0123,
+      "avg_trades": 38.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.0
+          },
+          "score": 56.6841,
+          "annualized_roi": 0.3357196772515356,
+          "win_rate": 0.675,
+          "max_dd": -0.00641135587044194,
+          "total_trades": 40,
+          "rating": "S"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.0
+          },
+          "score": 80.1784,
+          "annualized_roi": 0.560554716376906,
+          "win_rate": 0.7142857142857143,
+          "max_dd": -0.01096334600886599,
+          "total_trades": 35,
+          "rating": "S"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "11",
+          "params": {
+            "breakout_lookback": 18,
+            "atr_stop_mult": 2.0
+          },
+          "score": 76.8433,
+          "annualized_roi": 0.5238872697684844,
+          "win_rate": 0.7435897435897436,
+          "max_dd": -0.019638394026327714,
+          "total_trades": 39,
+          "rating": "S"
+        }
+      ]
+    },
+    "12": {
+      "strategy_id": "12",
+      "params": {
+        "atr_band_mult": 2.4,
+        "entry_rsi_min": 52,
+        "exit_rsi_min": 42
+      },
+      "score": -12.0,
+      "avg_win_rate": 0.0,
+      "avg_annualized_roi": 0.0,
+      "avg_max_dd": 0.0,
+      "avg_trades": 0.0,
+      "symbols": [
+        {
+          "symbol": "BTCUSDT",
+          "strategy_id": "12",
+          "params": {
+            "atr_band_mult": 2.4,
+            "entry_rsi_min": 52,
+            "exit_rsi_min": 42
+          },
+          "score": -12.0,
+          "annualized_roi": 0.0,
+          "win_rate": 0.0,
+          "max_dd": -0.0,
+          "total_trades": 0,
+          "rating": "C"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "strategy_id": "12",
+          "params": {
+            "atr_band_mult": 2.4,
+            "entry_rsi_min": 52,
+            "exit_rsi_min": 42
+          },
+          "score": -12.0,
+          "annualized_roi": 0.0,
+          "win_rate": 0.0,
+          "max_dd": -0.0,
+          "total_trades": 0,
+          "rating": "C"
+        },
+        {
+          "symbol": "SOLUSDT",
+          "strategy_id": "12",
+          "params": {
+            "atr_band_mult": 2.4,
+            "entry_rsi_min": 52,
+            "exit_rsi_min": 42
+          },
+          "score": -12.0,
+          "annualized_roi": 0.0,
+          "win_rate": 0.0,
+          "max_dd": -0.0,
+          "total_trades": 0,
+          "rating": "C"
+        }
+      ]
+    }
+  }
+}

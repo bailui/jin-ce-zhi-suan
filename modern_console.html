@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>白鹿智算 · 精英资产指挥部</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'brand-bg': '#050a1a',
+                        'brand-card': '#0c142d',
+                        'brand-border': '#1e293b',
+                        'brand-accent': '#0ea5e9',
+                        'brand-up': '#10b981',
+                        'brand-down': '#f43f5e',
+                        'elite-gold': '#fbbf24',
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass { background: rgba(12, 20, 45, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .glow-blue { box-shadow: 0 0 30px rgba(14, 165, 233, 0.15); }
+        .glow-gold { box-shadow: 0 0 30px rgba(251, 191, 36, 0.1); }
+        .pulse-live { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .7; transform: scale(1.05); } }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-brand-bg text-slate-100 font-sans selection:bg-brand-accent selection:text-white overflow-hidden h-screen flex">
+
+    <!-- Sidebar -->
+    <aside class="w-64 border-r border-brand-border flex flex-col p-8 space-y-10 bg-brand-bg/80">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 bg-brand-accent rounded-2xl flex items-center justify-center shadow-lg shadow-brand-accent/30">
+                <i class="fas fa-bolt-lightning text-white text-lg"></i>
+            </div>
+            <div class="leading-none">
+                <div class="font-extrabold text-xl tracking-tight">白鹿智算</div>
+                <div class="text-[10px] text-brand-accent font-bold tracking-widest uppercase">Elite Edition</div>
+            </div>
+        </div>
+
+        <nav class="flex-1 space-y-2">
+            <a href="#" class="flex items-center space-x-4 px-4 py-3 bg-brand-accent/10 text-brand-accent rounded-2xl font-bold transition-all">
+                <i class="fas fa-rocket w-6"></i>
+                <span>实战控制台</span>
+            </a>
+            <a href="/report" class="flex items-center space-x-4 px-4 py-3 text-slate-500 hover:text-slate-100 rounded-2xl transition-all">
+                <i class="fas fa-scroll w-6"></i>
+                <span>战绩回顾</span>
+            </a>
+            <a href="#" class="flex items-center space-x-4 px-4 py-3 text-slate-500 hover:text-slate-100 rounded-2xl transition-all">
+                <i class="fas fa-brain w-6"></i>
+                <span>策略进化库</span>
+            </a>
+        </nav>
+
+        <div class="space-y-4">
+            <div class="p-5 glass rounded-3xl border-elite-gold/20 glow-gold">
+                <div class="text-[10px] text-elite-gold uppercase font-extrabold mb-3">AI 进化引擎</div>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs text-slate-400">平均胜率</span>
+                    <span class="text-xs font-mono font-bold text-brand-up">81.2%</span>
+                </div>
+                <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
+                    <div class="h-full bg-brand-up w-[81.2%]"></div>
+                </div>
+                <div class="text-[9px] text-slate-500 mt-2 text-center">每24h自动复盘进化</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col min-w-0 bg-slate-950/40 relative">
+        
+        <!-- Top Status Bar -->
+        <header class="h-20 flex items-center justify-between px-10 border-b border-brand-border bg-brand-bg/40 backdrop-blur-xl sticky top-0 z-20">
+            <div class="flex items-center space-x-8">
+                <div>
+                    <div class="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest">系统状态</div>
+                    <div class="flex items-center space-x-2">
+                        <span id="bot-status-dot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+                        <span id="bot-status-text" class="text-xs font-bold text-slate-400">已就绪 (Ready)</span>
+                    </div>
+                </div>
+                <div class="w-px h-8 bg-brand-border"></div>
+                <div>
+                    <div class="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest">大盘红绿灯</div>
+                    <div id="btc-regime" class="text-xs font-mono font-bold text-brand-up">--</div>
+                </div>
+            </div>
+
+            <!-- Central Start Button -->
+            <div class="absolute left-1/2 -translate-x-1/2">
+                <button id="launch-btn" onclick="toggleBot()" class="px-10 py-3 bg-brand-accent hover:bg-sky-400 text-white rounded-full font-black tracking-widest uppercase text-sm shadow-xl shadow-brand-accent/20 transition-all active:scale-95 flex items-center space-x-3">
+                    <i id="launch-icon" class="fas fa-play"></i>
+                    <span id="launch-text">启动精英机器人</span>
+                </button>
+            </div>
+
+            <div class="flex items-center space-x-6">
+                <div class="text-right">
+                    <div class="text-[10px] text-slate-500 font-extrabold uppercase">虚拟总资产</div>
+                    <div id="total-balance" class="text-xl font-black font-mono tracking-tight">$0.00</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Body Area -->
+        <div class="flex-1 overflow-y-auto p-10 space-y-10">
+            
+            <!-- Quick Info Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="glass p-8 rounded-[40px] border-l-4 border-brand-accent glow-blue">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="p-3 bg-brand-accent/10 rounded-2xl"><i class="fas fa-crosshairs text-brand-accent"></i></div>
+                        <span class="text-[10px] bg-brand-accent/20 text-brand-accent px-2 py-0.5 rounded-lg font-bold">高胜率核心</span>
+                    </div>
+                    <h3 class="text-sm font-extrabold text-slate-400 mb-2 uppercase tracking-tight">主攻策略集</h3>
+                    <div class="text-lg font-black text-white">牛旗 (18) + 唐奇安 (11)</div>
+                    <p class="text-[10px] text-slate-500 mt-2">已开启 MTF 多周期趋势确认</p>
+                </div>
+
+                <div class="glass p-8 rounded-[40px] border-l-4 border-elite-gold glow-gold">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="p-3 bg-elite-gold/10 rounded-2xl"><i class="fas fa-dna text-elite-gold"></i></div>
+                        <span class="text-[10px] bg-elite-gold/20 text-elite-gold px-2 py-0.5 rounded-lg font-bold">进化状态</span>
+                    </div>
+                    <h3 class="text-sm font-extrabold text-slate-400 mb-2 uppercase tracking-tight">进化审计报告</h3>
+                    <div id="evolution-summary" class="text-lg font-black text-white">等待第一次复盘...</div>
+                    <p class="text-[10px] text-slate-500 mt-2">全自动回测优化中</p>
+                </div>
+
+                <div class="glass p-8 rounded-[40px] border-l-4 border-brand-up">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="p-3 bg-brand-up/10 rounded-2xl"><i class="fas fa-radar text-brand-up"></i></div>
+                        <span class="text-[10px] bg-brand-up/20 text-brand-up px-2 py-0.5 rounded-lg font-bold">全网感知</span>
+                    </div>
+                    <h3 class="text-sm font-extrabold text-slate-400 mb-2 uppercase tracking-tight">正在监控币种</h3>
+                    <div id="target-count" class="text-lg font-black text-white">4个标的活跃中</div>
+                    <p class="text-[10px] text-slate-500 mt-2">10分钟一次全市场扫描</p>
+                </div>
+            </div>
+
+            <!-- Monitor Grid -->
+            <div class="space-y-6">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-black tracking-tight uppercase">指挥部监控矩阵</h2>
+                </div>
+                <div id="monitor-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Cards will be injected here -->
+                    <div class="glass p-8 rounded-[32px] border border-brand-border/50 animate-pulse flex flex-col items-center justify-center space-y-4">
+                        <div class="w-12 h-12 bg-slate-800 rounded-full"></div>
+                        <div class="h-4 bg-slate-800 rounded w-24"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Realtime Activity Logs -->
+            <div class="space-y-6">
+                <h2 class="text-xl font-black tracking-tight uppercase">行动日志 (Action Log)</h2>
+                <div id="log-container" class="glass rounded-[40px] p-8 h-80 overflow-y-auto font-mono text-xs text-slate-400 space-y-2">
+                    <div class="text-slate-600 italic">>> 系统已初始化，等待机器人启动指令...</div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Overlay for Loading -->
+        <div id="loading-overlay" class="absolute inset-0 bg-brand-bg/80 backdrop-blur-md hidden flex flex-col items-center justify-center z-50">
+            <div class="w-16 h-16 border-4 border-brand-accent border-t-transparent rounded-full animate-spin mb-6"></div>
+            <div class="text-xl font-black text-brand-accent tracking-widest uppercase">正在部署顶级内阁...</div>
+            <p class="text-slate-500 mt-2">预热 11,520 条 K 线中...</p>
+        </div>
+    </main>
+
+    <script>
+        let isRunning = false;
+
+        async function toggleBot() {
+            const btn = document.getElementById('launch-btn');
+            const overlay = document.getElementById('loading-overlay');
+            
+            if (!isRunning) {
+                // START
+                overlay.classList.remove('hidden');
+                try {
+                    const res = await fetch('/api/crypto/launch', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        setTimeout(() => {
+                            overlay.classList.add('hidden');
+                            isRunning = true;
+                            updateUIState();
+                            addLog(">> 精英机器人启动指令已执行。");
+                            addLog(">> 正在全自动执行 BTC 环境审计与标的预热...");
+                        }, 3000);
+                    }
+                } catch (e) {
+                    alert("启动失败: " + e);
+                    overlay.classList.add('hidden');
+                }
+            } else {
+                // STOP
+                if (confirm("确定要停止机器人吗？停止后将不再自动监控机会。")) {
+                    const res = await fetch('/api/crypto/stop', { method: 'POST' });
+                    isRunning = false;
+                    updateUIState();
+                    addLog(">> 机器人已由指挥官强制停止。");
+                }
+            }
+        }
+
+        function updateUIState() {
+            const btn = document.getElementById('launch-btn');
+            const icon = document.getElementById('launch-icon');
+            const text = document.getElementById('launch-text');
+            const dot = document.getElementById('bot-status-dot');
+            const statText = document.getElementById('bot-status-text');
+
+            if (isRunning) {
+                btn.classList.remove('bg-brand-accent');
+                btn.classList.add('bg-brand-down', 'pulse-live');
+                icon.className = 'fas fa-stop';
+                text.innerText = '停止精英机器人';
+                dot.className = 'w-2 h-2 rounded-full bg-brand-up shadow-[0_0_10px_#10b981]';
+                statText.innerText = '实时跑盘中 (Live)';
+                statText.classList.remove('text-slate-400');
+                statText.classList.add('text-brand-up');
+            } else {
+                btn.classList.remove('bg-brand-down', 'pulse-live');
+                btn.classList.add('bg-brand-accent');
+                icon.className = 'fas fa-play';
+                text.innerText = '启动精英机器人';
+                dot.className = 'w-2 h-2 rounded-full bg-slate-600';
+                statText.innerText = '已就绪 (Ready)';
+                statText.classList.remove('text-brand-up');
+                statText.classList.add('text-slate-400');
+            }
+        }
+
+        async function updateDashboard() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                // Detect running state from API
+                if (data.is_running && !isRunning) {
+                    isRunning = true;
+                    updateUIState();
+                }
+
+                // Update Total Balance
+                let totalVal = 0;
+                let monitorHtml = '';
+                const pools = Object.values(data.live_fund_pools);
+                pools.forEach(pool => {
+                    if (pool.stock_code.includes('USDT')) {
+                        totalVal += pool.fund_value;
+                        
+                        const isUp = pool.realized_pnl >= 0;
+                        const accentColor = isUp ? 'brand-up' : 'brand-down';
+                        
+                        monitorHtml += `
+                        <div class="glass p-8 rounded-[40px] border border-brand-border/40 hover:border-brand-accent/50 transition-all cursor-pointer group">
+                            <div class="flex justify-between items-start mb-6">
+                                <div class="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center text-brand-accent group-hover:scale-110 transition-transform">
+                                    <i class="fab fa-bitcoin text-xl"></i>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-[10px] text-slate-500 font-extrabold uppercase">当前估值</div>
+                                    <div class="text-xl font-black font-mono">$${pool.fund_value.toLocaleString(undefined, {minimumFractionDigits: 0})}</div>
+                                </div>
+                            </div>
+                            <h4 class="text-2xl font-black tracking-tighter mb-1">${pool.stock_code}</h4>
+                            <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-6">Elite Monitor Active</div>
+                            
+                            <div class="grid grid-cols-2 gap-4 pt-6 border-t border-brand-border/50">
+                                <div>
+                                    <div class="text-[9px] text-slate-600 uppercase font-bold">累计盈亏</div>
+                                    <div class="text-xs font-mono font-bold text-${accentColor}">+$${pool.realized_pnl.toFixed(2)}</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-[9px] text-slate-600 uppercase font-bold">活跃策略</div>
+                                    <div class="text-xs font-mono font-bold text-slate-400">10, 11, 18</div>
+                                </div>
+                            </div>
+                        </div>
+                        `;
+                    }
+                });
+                
+                document.getElementById('total-balance').innerText = `$${totalVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                document.getElementById('target-count').innerText = `${pools.filter(p=>p.stock_code.includes('USDT')).length} 个标的活跃中`;
+                document.getElementById('monitor-container').innerHTML = monitorHtml || '<div class="col-span-3 py-20 text-center text-slate-600 font-bold uppercase tracking-widest">指挥部待命中，请启动机器人</div>';
+                
+                // BTC Regime
+                const btcStatus = data.live_enabled ? "BULLISH" : "CAUTION";
+                document.getElementById('btc-regime').innerText = `BTC > EMA20 (${btcStatus})`;
+                document.getElementById('btc-regime').className = `text-xs font-mono font-bold ${data.live_enabled ? 'text-brand-up' : 'text-brand-down'}`;
+
+            } catch (err) {
+                console.error("Dashboard Sync Error:", err);
+            }
+        }
+
+        async function updateEvolution() {
+            try {
+                const response = await fetch('/api/crypto/evolution');
+                const data = await response.json();
+                if (data.status === 'success') {
+                    const report = data.report;
+                    document.getElementById('evolution-summary').innerText = `胜率 ${report.win_rate}% | 利润 $${report.total_pnl.toFixed(0)}`;
+                }
+            } catch (e) {}
+        }
+
+        function addLog(msg) {
+            const container = document.getElementById('log-container');
+            const time = new Date().toLocaleTimeString();
+            container.innerHTML += `<div class="mb-1"><span class="text-brand-accent">[${time}]</span> ${msg}</div>`;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        setInterval(updateDashboard, 5000);
+        setInterval(updateEvolution, 60000);
+        updateDashboard();
+        updateEvolution();
+    </script>
+</body>
+</html>

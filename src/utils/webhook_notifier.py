@@ -77,6 +77,7 @@ class WebhookNotifier:
     def _build_text(self, event_type, stock_code, data):
         ts_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         evt_label_map = {
+            "crypto_signal": "加密方向信号",
             "trade_exec": "成交回报",
             "live_alert": "实盘告警",
             "zhongshu": "策略信号",
@@ -119,7 +120,9 @@ class WebhookNotifier:
         msg = str(data.get("msg", "") or "").strip()
         msg_garbled = ("�" in msg) or (msg.count("?") >= 2)
         if msg_garbled:
-            if event_type == "zhongshu":
+            if event_type == "crypto_signal":
+                msg = f"{stock_code} 出现{data.get('action', '方向')}信号，建议查看实时导航。"
+            elif event_type == "zhongshu":
                 msg = f"策略[{strategy_id or '--'}]生成信号: {direction_label or '--'} @ {data.get('price', '--')}"
             elif event_type == "menxia":
                 msg = str(data.get("decision", "") or "").lower()
@@ -145,6 +148,10 @@ class WebhookNotifier:
             lines.append(f"价格: {data.get('price')}")
         if data.get("qty") is not None:
             lines.append(f"数量: {data.get('qty')}")
+        if data.get("action") is not None:
+            lines.append(f"动作: {data.get('action')}")
+        if data.get("leverage") is not None:
+            lines.append(f"建议杠杆: {data.get('leverage')}x")
         if metric_label:
             lines.append(f"监控指标: {metric_label}")
         if level_label:
@@ -298,6 +305,7 @@ class WebhookNotifier:
 
     def _build_feishu_payload(self, event_type, stock_code, data):
         evt_label_map = {
+            "crypto_signal": ("加密方向信号", "carmine", "🧭"),
             "trade_exec": ("成交回报", "green", "✅"),
             "live_alert": ("实盘告警", "red", "🚨"),
             "zhongshu": ("策略信号", "blue", "📈"),
@@ -349,7 +357,9 @@ class WebhookNotifier:
         msg = str(data.get("msg", "") or "").strip()
         msg_garbled = self._looks_garbled(msg)
         if msg_garbled:
-            if event_type == "zhongshu":
+            if event_type == "crypto_signal":
+                msg = f"{stock_code} 出现{data.get('action', '方向')}信号，建议查看实时导航。"
+            elif event_type == "zhongshu":
                 msg = f"策略[{strategy_id or '--'}]生成信号：{direction_label or '--'} @ {data.get('price', '--')}"
             elif event_type == "menxia":
                 decision = str(data.get("decision", "") or "").lower()
@@ -420,6 +430,10 @@ class WebhookNotifier:
             kv_lines.append(f"**价格**：`{self._safe_text(data.get('price'))}`")
         if data.get("qty") is not None:
             kv_lines.append(f"**数量**：`{self._safe_text(data.get('qty'))}`")
+        if data.get("action") is not None:
+            kv_lines.append(f"**动作**：`{self._safe_text(data.get('action'))}`")
+        if data.get("leverage") is not None:
+            kv_lines.append(f"**建议杠杆**：`{self._safe_text(data.get('leverage'))}x`")
         if metric_label:
             kv_lines.append(f"**监控指标**：{self._safe_text(metric_label)}")
         if level_label:
@@ -752,7 +766,7 @@ class WebhookNotifier:
         if not bool(cfg.get("enabled", False)):
             return
         await self._maybe_retry_failed(cfg)
-        event_types = cfg.get("event_types", ["trade_exec", "live_alert", "zhongshu", "menxia", "system"])
+        event_types = cfg.get("event_types", ["crypto_signal", "trade_exec", "live_alert", "zhongshu", "menxia", "system"])
         event_types = event_types if isinstance(event_types, list) else []
         if event_types and (event_type not in event_types):
             return

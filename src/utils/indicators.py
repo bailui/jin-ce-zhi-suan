@@ -182,3 +182,94 @@ class Indicators:
     @staticmethod
     def bollinger_bands(close, window=20, num_std=2):
         return Indicators.BollingerBands(close, window=window, num_std=num_std)
+
+    @staticmethod
+    def CMF(df, window=20):
+        """Chaikin Money Flow"""
+        mfv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / (df['high'] - df['low'])
+        mfv = mfv.replace([np.inf, -np.inf], 0).fillna(0)
+        mfv *= df['vol']
+        cmf = mfv.rolling(window=window).sum() / df['vol'].rolling(window=window).sum()
+        return cmf
+
+    @staticmethod
+    def VWAP(df, window=None):
+        """VWAP. If window is None, it's cumulative. If window is integer, it's rolling."""
+        vpv = df['close'] * df['vol']
+        if window is None:
+            vwap = vpv.cumsum() / df['vol'].cumsum()
+        else:
+            vwap = vpv.rolling(window=window).sum() / df['vol'].rolling(window=window).sum()
+        return vwap
+
+    @staticmethod
+    def OBV(df):
+        """On-Balance Volume"""
+        obv = (np.sign(df['close'].diff()) * df['vol']).fillna(0).cumsum()
+        return obv
+
+    @staticmethod
+    def ADX(df, window=14):
+        """Average Directional Index"""
+        high = df['high']
+        low = df['low']
+        close = df['close']
+        
+        plus_dm = high.diff()
+        minus_dm = low.diff()
+        plus_dm[plus_dm < 0] = 0
+        minus_dm[minus_dm > 0] = 0
+        minus_dm = abs(minus_dm)
+        
+        tr = Indicators.ATR(df, window=1).fillna(0) # TR is ATR(1)
+        
+        atr = tr.rolling(window=window).mean()
+        plus_di = 100 * (plus_dm.rolling(window=window).mean() / atr)
+        minus_di = 100 * (minus_dm.rolling(window=window).mean() / atr)
+        dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
+        adx = dx.rolling(window=window).mean()
+        return adx
+
+    @staticmethod
+    def MFI(df, window=14):
+        """Money Flow Index"""
+        tp = (df['high'] + df['low'] + df['close']) / 3
+        rmf = tp * df['vol']
+        
+        pos_mf = pd.Series(0.0, index=df.index)
+        neg_mf = pd.Series(0.0, index=df.index)
+        
+        diff = tp.diff()
+        pos_mf[diff > 0] = rmf[diff > 0]
+        neg_mf[diff < 0] = rmf[diff < 0]
+        
+        mfr = pos_mf.rolling(window=window).sum() / neg_mf.rolling(window=window).sum()
+        mfi = 100 - (100 / (1 + mfr))
+        return mfi
+
+    @staticmethod
+    def SLOPE(series, window=5):
+        """Linear regression slope over window bars using numpy."""
+        def get_slope(y):
+            if len(y) < window or np.all(np.isnan(y)): return 0.0
+            x = np.arange(len(y))
+            # OLS: slope = cov(x,y) / var(x)
+            # Simplification for fixed x = [0, 1, 2, ... n-1]
+            n = len(y)
+            sum_x = n * (n - 1) / 2
+            sum_y = np.sum(y)
+            sum_xx = n * (n - 1) * (2 * n - 1) / 6
+            sum_xy = np.sum(x * y)
+            denominator = (n * sum_xx - sum_x**2)
+            if denominator == 0: return 0.0
+            slope = (n * sum_xy - sum_x * sum_y) / denominator
+            return slope
+        return series.rolling(window=window).apply(get_slope, raw=True)
+
+    @staticmethod
+    def TIGHTNESS(high, low, window=10):
+        """Measures range tightness as (MaxHigh - MinLow) / AveragePrice."""
+        max_h = high.rolling(window=window).max()
+        min_l = low.rolling(window=window).min()
+        avg_p = (high + low) / 2
+        return (max_h - min_l) / avg_p.rolling(window=window).mean()

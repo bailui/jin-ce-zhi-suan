@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>白鹿智算 · 实时方向导航</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+            <div>
+                <div class="text-2xl font-bold">白鹿智算 · 实时方向导航</div>
+                <div class="text-sm text-slate-400 mt-1">基于 Binance 最新行情与多周期结构，动态输出 BTC / ETH / SOL 的方向、仓位、开仓区、止盈止损与风险提示。</div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="llm-config-btn" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">LLM 设置</button>
+                <button id="refresh-btn" class="px-4 py-2 rounded bg-cyan-600 hover:bg-cyan-500 border border-cyan-500 text-sm">刷新</button>
+                <button id="optimize-btn" class="px-4 py-2 rounded bg-amber-600 hover:bg-amber-500 border border-amber-500 text-sm">开始持续优化</button>
+                <a href="/" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">返回控制台</a>
+            </div>
+        </div>
+        <div id="page-feedback" class="hidden mb-4 px-4 py-3 rounded border text-sm"></div>
+
+        <!-- LLM Config Modal -->
+        <div id="llm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="text-xl font-bold">LLM 模型接入设置</div>
+                    <button id="close-llm-btn" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-2">常用模型预设</label>
+                        <div class="grid grid-cols-2 gap-2 mb-3">
+                            <button type="button" class="preset-llm-btn px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] border border-slate-700" data-url="https://api.deepseek.com" data-model="deepseek-chat">DeepSeek (性价比)</button>
+                            <button type="button" class="preset-llm-btn px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] border border-slate-700" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1" data-model="qwen-max">通义千问 (阿里)</button>
+                            <button type="button" class="preset-llm-btn px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] border border-slate-700" data-url="https://api.moonshot.cn/v1" data-model="moonshot-v1-8k">Kimi (月之暗面)</button>
+                            <button type="button" class="preset-llm-btn px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] border border-slate-700" data-url="https://api.openai.com/v1" data-model="gpt-4o">OpenAI (国际)</button>
+                        </div>
+                        <label class="block text-xs text-slate-500 mb-1">API URL (Endpoint)</label>
+                        <input id="llm-url" type="text" placeholder="https://api.openai.com/v1" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm focus:border-cyan-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">API Key</label>
+                        <input id="llm-key" type="password" placeholder="sk-..." class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm focus:border-cyan-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">选择模型 (Model)</label>
+                        <input id="llm-model" type="text" placeholder="gpt-4o" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm focus:border-cyan-500 outline-none">
+                    </div>
+                    <div class="pt-2 flex gap-2">
+                        <button id="test-llm-btn" class="flex-1 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm">测试连接</button>
+                        <button id="save-llm-btn" class="flex-1 py-2 rounded bg-cyan-600 hover:bg-cyan-500 border border-cyan-500 text-sm">保存配置</button>
+                    </div>
+                    <div id="llm-feedback" class="hidden text-xs py-2 px-3 rounded"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6" id="market-cards"></div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div class="xl:col-span-2 bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-lg font-semibold">市场总览 · <span id="regime-tag" class="text-xs px-2 py-0.5 rounded border border-slate-700 text-slate-400 font-normal">--</span></div>
+                    <div class="flex items-center gap-2">
+                        <div id="audit-badge" class="hidden text-[10px] px-2 py-0.5 rounded-full border border-emerald-900/40 bg-emerald-950/20 text-emerald-300">胜率审计: --%</div>
+                        <button id="ai-review-btn" class="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs border border-indigo-500">AI 智能解读</button>
+                    </div>
+                </div>
+                <div id="market-regime" class="text-sm text-slate-300">--</div>
+                <div id="ai-review-content" class="hidden mt-3 p-3 rounded bg-indigo-950/20 border border-indigo-900/50 text-indigo-100 text-sm leading-relaxed italic">正在分析中...</div>
+                <div id="market-note" class="text-sm text-slate-400 mt-2">--</div>
+                <div id="leader-plan" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+            </div>
+            <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+                <div class="text-lg font-semibold mb-3">使用提醒</div>
+                <div class="space-y-2 text-sm text-slate-400">
+                    <div>1. 这不是确定性预测，而是概率型方向导航。</div>
+                    <div>2. 先看方向与仓位，再看止损是否可接受。</div>
+                    <div>3. 波动率升高时，系统会自动下调建议仓位。</div>
+                    <div>4. 后续可以继续接入国际新闻、链上数据和多模型分析。</div>
+                </div>
+                <div class="mt-4 text-xs text-slate-500" id="updated-at">更新时间：--</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-4 mt-6">
+            <div class="xl:col-span-3 bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-lg font-semibold">做多 / 做空触发历史</div>
+                    <div class="text-xs text-slate-500" id="signal-history-meta">--</div>
+                </div>
+                <div id="signal-history-list" class="space-y-2 max-h-[420px] overflow-auto pr-1"></div>
+            </div>
+            <div class="xl:col-span-2 bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-lg font-semibold">胜率自动优化面板</div>
+                    <div class="text-xs text-slate-500" id="optimizer-meta">--</div>
+                </div>
+                <div id="optimizer-panel" class="space-y-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function fmtPrice(v) {
+            const n = Number(v);
+            if (!Number.isFinite(n)) return '--';
+            if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+            if (n >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+            return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+        }
+
+        function fmtPct(v, digits = 2) {
+            const n = Number(v);
+            if (!Number.isFinite(n)) return '--';
+            return `${n.toFixed(digits)}%`;
+        }
+
+        function asPct(v) {
+            const n = Number(v);
+            if (!Number.isFinite(n)) return '--';
+            return Math.abs(n) <= 1 ? fmtPct(n * 100, 2) : fmtPct(n, 2);
+        }
+
+        function formatDateTime(v) {
+            if (!v) return '--';
+            const d = new Date(v);
+            if (Number.isNaN(d.getTime())) return v;
+            return d.toLocaleString('zh-CN', {
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function badge(direction) {
+            const d = String(direction || '').toUpperCase();
+            if (d === 'LONG') return 'text-emerald-300 border-emerald-500 bg-emerald-950/30';
+            if (d === 'LIGHT_LONG') return 'text-cyan-300 border-cyan-500 bg-cyan-950/30';
+            if (d === 'SHORT' || d === 'LIGHT_SHORT') return 'text-rose-300 border-rose-500 bg-rose-950/30';
+            if (d === 'DEFENSIVE') return 'text-rose-300 border-rose-500 bg-rose-950/30';
+            return 'text-amber-300 border-amber-500 bg-amber-950/30';
+        }
+
+        function directionText(direction) {
+            const d = String(direction || '').toUpperCase();
+            if (d === 'LONG') return '偏多';
+            if (d === 'LIGHT_LONG') return '轻多';
+            if (d === 'SHORT') return '偏空';
+            if (d === 'LIGHT_SHORT') return '轻空';
+            if (d === 'DEFENSIVE') return '防守';
+            return '观望';
+        }
+
+        function actionColor(action) {
+            const t = String(action || '');
+            if (t === '做多') return 'text-emerald-300';
+            if (t === '做空') return 'text-rose-300';
+            return 'text-amber-300';
+        }
+
+        function tradeStateBadge(state) {
+            const code = String(state || '').toLowerCase();
+            if (code === 'in_entry_zone') return 'text-emerald-300 border-emerald-500 bg-emerald-950/30';
+            if (code === 'waiting_entry') return 'text-cyan-300 border-cyan-500 bg-cyan-950/30';
+            if (code === 'passed_entry') return 'text-amber-300 border-amber-500 bg-amber-950/30';
+            if (code === 'near_stop') return 'text-rose-300 border-rose-500 bg-rose-950/30';
+            if (code === 'invalidated' || code === 'expired') return 'text-slate-400 border-slate-700 bg-slate-900/40 opacity-60';
+            return 'text-slate-300 border-slate-600 bg-slate-900/60';
+        }
+
+        const llmModal = document.getElementById('llm-modal');
+        const llmBtn = document.getElementById('llm-config-btn');
+        const closeLlmBtn = document.getElementById('close-llm-btn');
+        const testLlmBtn = document.getElementById('test-llm-btn');
+        const saveLlmBtn = document.getElementById('save-llm-btn');
+        const llmFeedback = document.getElementById('llm-feedback');
+
+        llmBtn.addEventListener('click', async () => {
+            llmModal.classList.remove('hidden');
+            const res = await fetch('/api/config/llm_get');
+            const data = await res.json();
+            if (data.status === 'success') {
+                document.getElementById('llm-url').value = data.api_url || '';
+                document.getElementById('llm-key').value = data.api_key || '';
+                document.getElementById('llm-model').value = data.model || '';
+            }
+        });
+
+        document.querySelectorAll('.preset-llm-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('llm-url').value = btn.dataset.url;
+                document.getElementById('llm-model').value = btn.dataset.model;
+                llmFeedback.innerText = `已切换至 ${btn.innerText}`;
+                llmFeedback.className = 'text-xs py-2 px-3 rounded bg-indigo-950/40 text-indigo-300';
+                llmFeedback.classList.remove('hidden');
+            });
+        });
+
+        closeLlmBtn.addEventListener('click', () => llmModal.classList.add('hidden'));
+
+        testLlmBtn.addEventListener('click', async () => {
+            llmFeedback.innerText = '正在测试连接...';
+            llmFeedback.className = 'text-xs py-2 px-3 rounded bg-slate-800 text-slate-300';
+            llmFeedback.classList.remove('hidden');
+            const res = await fetch('/api/config/llm_test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    api_key: document.getElementById('llm-key').value,
+                    api_url: document.getElementById('llm-url').value,
+                    model: document.getElementById('llm-model').value
+                })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                llmFeedback.innerText = '连接成功！模型响应正常。';
+                llmFeedback.className = 'text-xs py-2 px-3 rounded bg-emerald-950/40 text-emerald-300';
+            } else {
+                llmFeedback.innerText = `连接失败: ${data.msg}`;
+                llmFeedback.className = 'text-xs py-2 px-3 rounded bg-rose-950/40 text-rose-300';
+            }
+        });
+
+        saveLlmBtn.addEventListener('click', async () => {
+            const res = await fetch('/api/config/llm_save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    api_key: document.getElementById('llm-key').value,
+                    api_url: document.getElementById('llm-url').value,
+                    model: document.getElementById('llm-model').value
+                })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                llmFeedback.innerText = '配置已保存并应用。';
+                llmFeedback.className = 'text-xs py-2 px-3 rounded bg-cyan-950/40 text-cyan-300';
+                setTimeout(() => llmModal.classList.add('hidden'), 1000);
+            } else {
+                llmFeedback.innerText = `保存失败: ${data.msg}`;
+                llmFeedback.className = 'text-xs py-2 px-3 rounded bg-rose-950/40 text-rose-300';
+            }
+        });
+
+        function render(snapshot) {
+            const cards = document.getElementById('market-cards');
+            const regime = document.getElementById('market-regime');
+            const note = document.getElementById('market-note');
+            const leaderPlan = document.getElementById('leader-plan');
+            const updatedAt = document.getElementById('updated-at');
+            const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
+            regime.innerText = `${snapshot?.market_regime || '--'} · 市场总分 ${Number(snapshot?.market_score || 0).toFixed(1)}`;
+            const regimeTag = document.getElementById('regime-tag');
+            const auditBadge = document.getElementById('audit-badge');
+            
+            if (snapshot?.dominant_regime) {
+                regimeTag.innerText = snapshot.dominant_regime;
+                regimeTag.className = "text-xs px-2 py-0.5 rounded border border-cyan-800 bg-cyan-950/20 text-cyan-300 font-normal";
+            }
+            if (snapshot?.audit?.win_rate !== undefined) {
+                auditBadge.innerText = `近期胜率审计: ${snapshot.audit.win_rate}% (n=${snapshot.audit.sample_size})`;
+                auditBadge.classList.remove('hidden');
+                if (snapshot.audit.health === 'RISKY') auditBadge.className = "text-[10px] px-2 py-0.5 rounded-full border border-rose-900/40 bg-rose-950/20 text-rose-300";
+                else if (snapshot.audit.health === 'STABLE') auditBadge.className = "text-[10px] px-2 py-0.5 rounded-full border border-emerald-900/40 bg-emerald-950/20 text-emerald-300";
+            }
+            if (snapshot?.optimizer_note) {
+                note.innerText = snapshot.optimizer_note;
+                note.className = "text-sm text-amber-400 mt-2 font-medium";
+            } else {
+                note.innerText = Array.isArray(snapshot?.engine?.notes) && snapshot.engine.notes.length ? snapshot.engine.notes.join(' ') : '--';
+                note.className = "text-sm text-slate-400 mt-2";
+            }
+            updatedAt.innerText = `更新时间：${snapshot?.updated_at || '--'}`;
+            cards.innerHTML = items.map(item => {
+                const plan = item.trade_plan || {};
+                const isHighConf = (item.confidence || 0) >= 75;
+                const borderClass = isHighConf ? 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'border-slate-800';
+                const goldBadge = isHighConf ? '<span class="absolute -top-2 -right-2 px-2 py-0.5 rounded bg-amber-500 text-black text-[10px] font-bold shadow-lg">顶级机会</span>' : '';
+                
+                return `
+                    <div class="relative bg-slate-900/60 border ${borderClass} rounded-xl p-4 transition-all duration-300">
+                        ${goldBadge}
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xl font-bold ${isHighConf ? 'text-amber-400' : 'text-white'}">${item.symbol || '--'}</div>
+                                <div class="text-xs text-slate-500 mt-1">现价 ${fmtPrice(item.metrics?.price)}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-1 rounded border text-xs ${badge(item.direction)}">${directionText(item.direction)}</span>
+                                <span class="px-2 py-1 rounded border text-xs ${tradeStateBadge(plan.state_code)}">${plan.state_label || '等待触发'}</span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 mt-4 text-sm">
+                            <div><span class="text-slate-500">动作</span><div class="${isHighConf ? 'text-amber-400' : 'text-white'} font-semibold">${plan.action || '观望'}</div></div>
+                            <div><span class="text-slate-500">建议仓位</span><div class="text-white font-semibold">${fmtPct(item.position_pct, 1)}</div></div>
+                            <div><span class="text-slate-500">建议杠杆</span><div class="text-white font-semibold">${plan.leverage || 1}x</div></div>
+                            <div><span class="text-slate-500">置信度</span><div class="${isHighConf ? 'text-amber-400 font-bold' : 'text-white'} font-semibold">${item.confidence || 0}%</div></div>
+                            <div><span class="text-slate-500">开仓参考</span><div class="text-white font-semibold">${plan.entry_zone || '--'}</div></div>
+                            <div><span class="text-slate-500">止损</span><div class="text-rose-300 font-semibold">${plan.stop_loss || '--'}</div></div>
+                            <div><span class="text-slate-500">止盈一</span><div class="text-emerald-300 font-semibold">${plan.take_profit_1 || '--'}</div></div>
+                            <div><span class="text-slate-500">止盈二</span><div class="text-cyan-300 font-semibold">${plan.take_profit_2 || '--'}</div></div>
+                        </div>
+                        <div class="mt-3 text-sm text-white">${plan.state_detail || item.summary || '--'}</div>
+                        <div class="mt-2 text-xs text-amber-300">${item.risk_hint || '--'}</div>
+                    </div>
+                `;
+            }).join('');
+
+            const leader = snapshot?.leader || items[0];
+            if (leader) {
+                const plan = leader.trade_plan || {};
+                leaderPlan.innerHTML = `
+                    <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                        <div class="text-xs text-slate-500">当前优先标的</div>
+                        <div class="text-lg font-bold text-white mt-1">${leader.symbol} · ${directionText(leader.direction)}</div>
+                        <div class="text-sm text-slate-300 mt-2">${leader.summary || '--'}</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                        <div class="text-xs text-slate-500">执行导航</div>
+                        <div class="text-sm text-slate-300 mt-2">动作：${plan.action || '观望'} · 建议杠杆 ${plan.leverage || 1}x</div>
+                        <div class="text-sm mt-1"><span class="px-2 py-1 rounded border text-xs ${tradeStateBadge(plan.state_code)}">${plan.state_label || '等待触发'}</span></div>
+                        <div class="text-sm text-slate-300 mt-1">开仓参考：${plan.entry_zone || '--'}</div>
+                        <div class="text-sm text-white mt-1">${plan.state_detail || '--'}</div>
+                        <div class="text-sm text-slate-300 mt-1">止损：${plan.stop_loss || '--'}</div>
+                        <div class="text-sm text-slate-300 mt-1">止盈：${plan.take_profit_1 || '--'} / ${plan.take_profit_2 || '--'}</div>
+                    </div>
+                `;
+            } else {
+                leaderPlan.innerHTML = '';
+            }
+        }
+
+        function renderSignalHistory(payload) {
+            const wrap = document.getElementById('signal-history-list');
+            const meta = document.getElementById('signal-history-meta');
+            const rows = Array.isArray(payload?.history) ? payload.history : [];
+            meta.innerText = `最近 ${rows.length} 条`;
+            if (!rows.length) {
+                wrap.innerHTML = '<div class="text-sm text-slate-500">暂时还没有触发历史。</div>';
+                return;
+            }
+            wrap.innerHTML = rows.map(item => {
+                const isHighConf = (item.confidence || 0) >= 80;
+                const goldBorder = isHighConf ? 'border-amber-500/50 bg-amber-950/10' : 'border-slate-800 bg-slate-950/20';
+                const goldBadge = isHighConf ? '<span class="px-1.5 py-0.5 rounded bg-amber-500 text-black text-[10px] font-bold mr-2">高置信度</span>' : '';
+                return `
+                <div class="bg-slate-950 border ${goldBorder} rounded-lg p-3 transition-all duration-300">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center">
+                            ${goldBadge}
+                            <div class="font-semibold text-white">${item.symbol || '--'}</div>
+                        </div>
+                        <div class="text-xs ${actionColor(item.action)}">${item.action || '观望'} · ${item.leverage || 1}x</div>
+                    </div>
+                    <div class="mt-1 text-xs text-slate-500">${item.time || '--'} · 方向 ${directionText(item.direction)}</div>
+                    <div class="mt-2 text-sm text-slate-300">入场：${item.entry_zone || '--'}</div>
+                    <div class="text-sm text-slate-300">止损：${item.stop_loss || '--'} · 止盈：${item.take_profit_1 || '--'} / ${item.take_profit_2 || '--'}</div>
+                    <div class="text-xs text-slate-400 mt-2">
+                        置信度 <span class="${isHighConf ? 'text-amber-400 font-bold' : 'text-cyan-400'}">${item.confidence || 0}%</span> 
+                        · 建议仓位 ${fmtPct(item.position_pct || 0, 1)}
+                    </div>
+                    <div class="text-xs mt-1 flex items-center gap-2">
+                        <span class="px-2 py-1 rounded border ${tradeStateBadge(item.state_code)} text-[10px]">${item.state_label || '等待触发'}</span>
+                        ${isHighConf ? '<span class="text-[10px] text-amber-500 animate-pulse">核心入场信号</span>' : ''}
+                    </div>
+                    <div class="text-xs text-slate-400 bg-slate-900/40 p-2 rounded mt-2 border border-slate-800/50">${item.state_detail || item.summary || '--'}</div>
+                    <div class="text-xs text-amber-300 mt-1">${item.risk_hint || '--'}</div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        function renderOptimizer(payload) {
+            const wrap = document.getElementById('optimizer-panel');
+            const meta = document.getElementById('optimizer-meta');
+            const best = payload?.best_strategy || {};
+            const recent = payload?.recent_stats || {};
+            const topRows = Array.isArray(payload?.top_strategies) ? payload.top_strategies : [];
+            const suggestions = Array.isArray(payload?.suggestions) ? payload.suggestions : [];
+            const run = payload?.optimizer_run || {};
+            meta.innerText = `报告 ${payload?.total_reports || 0} 份`;
+            const latestRows = Array.isArray(run?.latest?.top_results) ? run.latest.top_results.slice(0, 3) : [];
+            const validRows = latestRows.filter(row => Number(row?.avg_trades || 0) > 0);
+            wrap.innerHTML = `
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-xs text-slate-500">当前自动优先策略</div>
+                    <div class="text-white font-bold mt-1">${best.name || best.strategy_id || '--'}</div>
+                    <div class="text-sm text-slate-300 mt-2">评分 ${best.score ?? '--'} · 胜率 ${best.win_rate ?? '--'}% · 年化 ${best.annualized_roi ?? '--'}%</div>
+                    <div class="text-sm text-slate-300 mt-1">最大回撤 ${best.max_dd ?? '--'}%</div>
+                </div>
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-xs text-slate-500">这个面板是什么</div>
+                    <div class="text-sm text-slate-300 mt-2">上半部分是历史回测里表现最稳的策略摘要，不是实时预测。</div>
+                    <div class="text-sm text-slate-300 mt-1">下半部分的“最近参数优化结果”才是你刚点按钮跑出来的新一轮参数测试。</div>
+                </div>
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-xs text-slate-500">近 10 轮总体表现</div>
+                    <div class="text-sm text-slate-300 mt-2">平均胜率 ${recent.avg_win_rate ?? '--'}%</div>
+                    <div class="text-sm text-slate-300 mt-1">平均总收益 ${recent.avg_total_return ?? '--'}%</div>
+                    <div class="text-sm text-slate-300 mt-1">平均最大回撤 ${recent.avg_max_drawdown ?? '--'}%</div>
+                </div>
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-xs text-slate-500 mb-2">策略排行榜</div>
+                    <div class="space-y-2">
+                        ${topRows.map((row, idx) => `
+                            <div class="flex items-center justify-between gap-3 text-sm">
+                                <div class="text-slate-200">${idx + 1}. ${row.name || row.strategy_id}</div>
+                                <div class="text-slate-400">胜率 ${row.win_rate}% · 评分 ${row.score}</div>
+                            </div>
+                        `).join('') || '<div class="text-sm text-slate-500">暂无优化数据</div>'}
+                    </div>
+                </div>
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-xs text-slate-500 mb-2">自动建议</div>
+                    <div class="space-y-2">
+                        ${suggestions.map(x => `<div class="text-sm text-amber-300">${x}</div>`).join('') || '<div class="text-sm text-slate-500">暂无建议</div>'}
+                    </div>
+                </div>
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-xs text-slate-500 mb-2">参数优化任务</div>
+                    <div class="text-sm text-slate-300">状态：${run?.continuous ? (run?.running ? '持续优化中 · 本轮运行中' : '持续优化中 · 等待下一轮') : (run?.running ? '单轮运行中' : '空闲')}</div>
+                    <div class="text-sm text-slate-300 mt-1">已完成轮次：${run?.iteration ?? 0}</div>
+                    <div class="text-sm text-slate-300 mt-1">循环间隔：${run?.interval_seconds ?? 60} 秒</div>
+                    <div class="text-sm text-slate-300 mt-1">最近启动：${formatDateTime(run?.last_run_at)}</div>
+                    <div class="text-sm text-slate-300 mt-1">最近完成：${formatDateTime(run?.last_completed_at)}</div>
+                    <div class="text-xs text-slate-500 mt-1">${run?.continuous ? (run?.running ? '系统正在跑当前这一轮，完成后会自动进入下一轮。' : '系统没有停，只是在等待下一轮自动启动。') : (run?.running ? '当前正在跑一轮优化。' : '点击上方按钮后会进入持续优化模式。')}</div>
+                    <div class="text-xs text-rose-300 mt-1">${run?.last_error || ''}</div>
+                </div>
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-xs text-slate-500 mb-2">最近参数优化结果</div>
+                    ${(() => {
+                        if (!latestRows.length) return '<div class="text-sm text-slate-500">还没有参数优化结果，点上方“开始持续优化”即可开始。</div>';
+                        if (!validRows.length) return '<div class="text-sm text-amber-300">最近这一批参数在当前区间几乎没有成交，说明这轮优化结果不够有用，建议拉长区间后再跑。</div>';
+                        return validRows.map((row, idx) => `
+                            <div class="text-sm text-slate-300 mb-2">
+                                <div>${idx + 1}. 策略 ${row.strategy_id} · 分数 ${row.score}</div>
+                                <div class="text-xs text-slate-500">胜率 ${asPct(row.avg_win_rate)} · 年化 ${asPct(row.avg_annualized_roi)} · 平均成交 ${row.avg_trades}</div>
+                                <div class="text-xs text-amber-300">${JSON.stringify(row.params)}</div>
+                            </div>
+                        `).join('');
+                    })()}
+                </div>
+            `;
+            syncOptimizeButton(run);
+        }
+
+        function syncOptimizeButton(run) {
+            const btn = document.getElementById('optimize-btn');
+            if (!btn) return;
+            const running = !!run?.running;
+            const continuous = !!run?.continuous;
+            btn.disabled = false;
+            btn.innerText = continuous ? '停止优化' : (running ? '优化运行中...' : '开始持续优化');
+            btn.className = continuous
+                ? 'px-4 py-2 rounded bg-rose-600 hover:bg-rose-500 border border-rose-500 text-sm'
+                : (running
+                    ? 'px-4 py-2 rounded bg-slate-700 border border-slate-600 text-sm text-slate-300'
+                    : 'px-4 py-2 rounded bg-amber-600 hover:bg-amber-500 border border-amber-500 text-sm');
+        }
+
+        function showFeedback(message, kind = 'info') {
+            const el = document.getElementById('page-feedback');
+            if (!el) return;
+            const styleMap = {
+                info: 'bg-cyan-950/40 border-cyan-700 text-cyan-200',
+                success: 'bg-emerald-950/40 border-emerald-700 text-emerald-200',
+                warning: 'bg-amber-950/40 border-amber-700 text-amber-200',
+                error: 'bg-rose-950/40 border-rose-700 text-rose-200',
+            };
+            el.className = `mb-4 px-4 py-3 rounded border text-sm ${styleMap[kind] || styleMap.info}`;
+            el.innerText = message;
+            el.classList.remove('hidden');
+        }
+
+        const aiBtn = document.getElementById('ai-review-btn');
+        const aiBox = document.getElementById('ai-review-content');
+
+        aiBtn.addEventListener('click', async () => {
+            aiBox.innerText = '正在联想大模型分析市场情绪中...';
+            aiBox.classList.remove('hidden');
+            try {
+                const res = await fetch('/api/crypto/ai_market_review');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    aiBox.innerText = data.content;
+                } else {
+                    aiBox.innerText = `解读失败: ${data.msg}`;
+                    setTimeout(() => aiBox.classList.add('hidden'), 3000);
+                }
+            } catch (e) {
+                aiBox.innerText = `请求失败: ${e.message}`;
+            }
+        });
+
+        async function loadSnapshot() {
+            const res = await fetch('/api/crypto/live_snapshot?symbols=BTCUSDT,ETHUSDT,SOLUSDT');
+            const data = await res.json();
+            if (!res.ok || data.status !== 'success') throw new Error(data.msg || '加载失败');
+            render(data);
+        }
+
+        async function loadSignalHistory() {
+            const res = await fetch('/api/crypto/signal_history?limit=30');
+            const data = await res.json();
+            if (!res.ok || data.status !== 'success') throw new Error(data.msg || '历史加载失败');
+            renderSignalHistory(data);
+        }
+
+        async function loadOptimizerPanel() {
+            const res = await fetch('/api/crypto/optimizer_summary');
+            const data = await res.json();
+            if (!res.ok || data.status !== 'success') throw new Error(data.msg || '优化面板加载失败');
+            renderOptimizer(data);
+        }
+
+        async function runOptimizer() {
+            try {
+                const current = await fetch('/api/crypto/optimizer_summary').then(r => r.json());
+                const currentRun = current?.optimizer_run || {};
+                if (currentRun.continuous) {
+                    const stopRes = await fetch('/api/crypto/optimizer_stop', { method: 'POST' });
+                    const stopData = await stopRes.json();
+                    if (!stopRes.ok || stopData.status !== 'success') throw new Error(stopData.msg || '停止优化失败');
+                    showFeedback('持续优化已停止。', 'success');
+                    await loadOptimizerPanel();
+                    return;
+                }
+                showFeedback('持续优化已启动。只要你不点停止，它会一直循环跑下去。', 'success');
+                syncOptimizeButton({ running: true, continuous: true });
+                const res = await fetch('/api/crypto/optimizer_run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+                        days: 120,
+                        capital: 200000,
+                        continuous: true,
+                        interval_seconds: 60
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok || !['accepted', 'info'].includes(data.status)) {
+                    throw new Error(data.msg || '启动优化失败');
+                }
+                await loadOptimizerPanel();
+                if (data.status === 'info') {
+                    showFeedback('当前已经有一轮优化在运行，先等它跑完。', 'warning');
+                }
+            } catch (e) {
+                showFeedback(`运行优化失败: ${e}`, 'error');
+                throw e;
+            }
+        }
+
+        async function refreshAll() {
+            await Promise.all([
+                loadSnapshot(),
+                loadSignalHistory(),
+                loadOptimizerPanel()
+            ]);
+        }
+
+        document.getElementById('refresh-btn').addEventListener('click', () => refreshAll().catch(console.error));
+        document.getElementById('optimize-btn').addEventListener('click', () => runOptimizer().catch(console.error));
+        refreshAll().catch(console.error);
+        setInterval(() => loadSnapshot().catch(console.error), 15000);
+        setInterval(() => loadSignalHistory().catch(console.error), 30000);
+        setInterval(() => loadOptimizerPanel().catch(console.error), 60000);
+        setInterval(() => loadOptimizerPanel().catch(console.error), 5000);
+    </script>
+</body>
+</html>

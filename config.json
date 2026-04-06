@@ -1,13 +1,14 @@
 {
   "system": {
-    "mode": "backtest",
-    "enable_live": false,
+    "asset_class": "crypto",
+    "mode": "live",
+    "enable_live": true,
     "initial_capital": 1000000,
     "log_level": "INFO",
     "server_host": "0.0.0.0",
     "server_port": 8000,
-    "private_config_path": "D:/04.量化/private-data/config.private.json",
-    "private_strategy_path": "D:/04.量化/private-data/strategies/custom_strategies.private.json",
+    "private_config_path": "D:/04.\u91cf\u5316/private-data/config.private.json",
+    "private_strategy_path": "D:/04.\u91cf\u5316/private-data/strategies/custom_strategies.private.json",
     "private_override_paths": [
       "data_provider.tushare_token",
       "data_provider.default_api_key",
@@ -17,16 +18,18 @@
       "data_provider.mysql_password",
       "data_provider.postgres_password",
       "data_provider.default_api_url",
+      "data_provider.proxy",
       "webhook_notification.feishu_webhook_url",
       "webhook_notification.feishu_secret"
     ]
   },
   "data_provider": {
-    "source": "default",
+    "source": "binance",
     "enable_fallback": false,
     "tushare_token": "",
     "default_api_key": "",
-    "default_api_url": "",
+    "default_api_url": "https://api.binance.com",
+    "proxy": "",
     "mysql_host": "127.0.0.1",
     "mysql_port": 3306,
     "mysql_user": "root",
@@ -75,8 +78,8 @@
     "interval_minutes": 60,
     "time_mode": "custom",
     "lookback_days": 20,
-    "custom_start_time": "2026-03-01 09:30:00",
-    "custom_end_time": "2026-03-31 15:00:00",
+    "custom_start_time": "2026-03-01 00:00:00",
+    "custom_end_time": "2026-03-31 23:59:59",
     "session_only": true,
     "intraday_mode": false,
     "max_codes": 10000,
@@ -96,28 +99,16 @@
     "direct_db_source": "mysql"
   },
   "targets": [
-    "301227.SZ",
-    "603083.SH"
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "PEPEUSDT",
+    "GIGGLEUSDT"
   ],
   "strategies": {
     "active_ids": [
       "11",
-      "12",
-      "13",
-      "14",
-      "15",
-      "16",
-      "17",
-      "18",
-      "19",
-      "20",
-      "34R1",
-      "34R1U",
-      "34R1U500",
-      "34R1U500V2",
-      "34R1U500V3",
-      "34R1U500V31",
-      "34R1U500V31B"
+      "18"
     ]
   },
   "risk_control": {
@@ -128,134 +119,85 @@
     "max_drawdown_pct": 0.06
   },
   "trading_cost": {
-    "commission_rate": 0.00025,
-    "min_commission": 5,
-    "stamp_duty": 0.001,
+    "commission_rate": 0.001,
+    "min_commission": 0,
+    "stamp_duty": 0,
     "transfer_fee": 0
   },
   "execution": {
-    "slippage": 0.001,
-    "settlement_rule": "T+1"
+    "slippage": 0.0005,
+    "settlement_rule": "T+0"
+  },
+  "trading_rules": {
+    "market_type": "crypto",
+    "trading_hours": "24x7",
+    "lot_size": 1,
+    "qty_step": 0.0001,
+    "min_order_qty": 0.0001
   },
   "global_backtest_baseline": {
-    "enabled": true,
-    "default_profile": "cn_equity_mid_long",
-    "fallback_profile": "cn_equity_mid_long",
+    "enabled": false,
+    "default_profile": "crypto_swing",
+    "fallback_profile": "crypto_swing",
     "enforce_defaults": true,
     "min_history_years": 5,
     "require_regime_coverage": true,
     "lock_backtest_data_source": false,
-    "fixed_data_source": "default",
+    "fixed_data_source": "binance",
     "strategy_profile_mapping": [
       {
-        "rule_id": "r1_cn_equity_mid_long",
+        "rule_id": "r1_crypto_core",
         "if": {
           "market": [
-            "A股"
+            "Crypto"
           ],
           "strategy_tags_any": [
-            "中线",
-            "波段",
-            "长线",
-            "量化",
-            "价值"
+            "\u8d8b\u52bf",
+            "\u52a8\u91cf",
+            "\u6ce2\u6bb5",
+            "\u7a81\u7834",
+            "\u91cf\u5316"
           ]
         },
-        "then_profile": "cn_equity_mid_long"
+        "then_profile": "crypto_swing"
       },
       {
-        "rule_id": "r2_cn_equity_tech_short",
-        "if": {
-          "market": [
-            "A股"
-          ],
-          "strategy_tags_any": [
-            "短线",
-            "形态",
-            "突破",
-            "均线",
-            "MACD"
-          ]
-        },
-        "then_profile": "cn_equity_tech_short"
-      },
-      {
-        "rule_id": "r3_cn_equity_intraday",
-        "if": {
-          "market": [
-            "A股"
-          ],
-          "strategy_tags_any": [
-            "超短",
-            "日内",
-            "打板",
-            "成本核对"
-          ]
-        },
-        "then_profile": "cn_equity_intraday"
-      },
-      {
-        "rule_id": "r4_t0_markets",
+        "rule_id": "r2_crypto_intraday",
         "if": {
           "market_any": [
-            "可转债",
-            "港股",
-            "美股",
-            "ETF_T0"
+            "Crypto"
           ],
           "supports_t0": true
         },
-        "then_profile": "t0_cross_market"
+        "then_profile": "crypto_intraday"
       }
     ],
     "profiles": {
-      "cn_equity_mid_long": {
-        "asset_scope": "A股中长线/量化",
-        "adjustment_mode": "hfq",
-        "settlement_rule": "T+1",
-        "cost_model": {
-          "commission_rate": 0.00025,
-          "min_commission": 5,
-          "stamp_duty_sell": 0.001,
-          "slippage": 0.001
-        }
-      },
-      "cn_equity_tech_short": {
-        "asset_scope": "A股短线技术形态",
-        "adjustment_mode": "qfq",
-        "settlement_rule": "T+1",
-        "cost_model": {
-          "commission_rate": 0.00025,
-          "min_commission": 5,
-          "stamp_duty_sell": 0.001,
-          "slippage": 0.001
-        }
-      },
-      "cn_equity_intraday": {
-        "asset_scope": "A股超短线/成本核对",
+      "crypto_swing": {
+        "asset_scope": "\u52a0\u5bc6\u8d27\u5e01\u8d8b\u52bf/\u6ce2\u6bb5",
         "adjustment_mode": "none",
-        "settlement_rule": "T+1",
-        "cost_model": {
-          "commission_rate": 0.00025,
-          "min_commission": 5,
-          "stamp_duty_sell": 0.001,
-          "slippage": 0.001
-        }
-      },
-      "t0_cross_market": {
-        "asset_scope": "可转债/港股/美股/T+0品种",
-        "adjustment_mode": "hfq",
         "settlement_rule": "T+0",
         "cost_model": {
-          "commission_rate": 0.00025,
-          "min_commission": 5,
-          "stamp_duty_sell": 0.001,
-          "slippage": 0.001
+          "commission_rate": 0.001,
+          "min_commission": 0,
+          "stamp_duty_sell": 0,
+          "slippage": 0.0005
+        }
+      },
+      "crypto_intraday": {
+        "asset_scope": "\u52a0\u5bc6\u8d27\u5e01\u65e5\u5185/\u77ed\u7ebf",
+        "adjustment_mode": "none",
+        "settlement_rule": "T+0",
+        "cost_model": {
+          "commission_rate": 0.001,
+          "min_commission": 0,
+          "stamp_duty_sell": 0,
+          "slippage": 0.0008
         }
       }
     },
-    "last_applied_profile": "cn_equity_mid_long",
-    "last_applied_market": "A股"
+    "last_applied_profile": "crypto_swing",
+    "last_applied_market": "Crypto"
   },
   "live_monitoring": {
     "sync_with_backtest_cost_model": true,
@@ -306,6 +248,7 @@
   "webhook_notification": {
     "enabled": true,
     "event_types": [
+      "crypto_signal",
       "trade_exec",
       "live_alert",
       "zhongshu",
@@ -314,7 +257,7 @@
       "system"
     ],
     "webhook_urls": [],
-    "feishu_webhook_url": "",
+    "feishu_webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/dfef4ec8-a737-4af2-b850-d26080c8e36e",
     "feishu_secret": "",
     "dedupe_window_seconds": 12,
     "timeout_sec": 5,
@@ -326,11 +269,25 @@
     "failed_retry_batch_size": 20,
     "failed_max_retry": 20
   },
+  "signal_monitor": {
+    "enabled": true,
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT",
+      "DOGEUSDT",
+      "PEPEUSDT",
+      "ORDIUSDT"
+    ],
+    "interval_seconds": 60,
+    "max_history": 300,
+    "history_file": "data/crypto_signal_history.json"
+  },
   "strategy_params": {
     "common": {
       "order_qty_mode": "cash_pct",
-      "order_qty": 100,
-      "order_cash_pct": 100
+      "order_qty": 0.01,
+      "order_cash_pct": 32.0
     },
     "01": {
       "min_history_bars": 500,
@@ -382,6 +339,70 @@
       "dynamic_order_qty": 350,
       "max_dynamic_qty": 1050,
       "stop_loss_pct": 0.05
+    },
+    "10": {
+      "min_history_bars": 120,
+      "fast_ema_period": 21,
+      "slow_ema_period": 55,
+      "trend_ema_period": 200,
+      "atr_period": 14,
+      "atr_stop_mult": 2.5,
+      "take_profit_rr": 3.0,
+      "rsi_period": 14,
+      "entry_rsi_min": 54,
+      "entry_rsi_max": 72,
+      "entry_atr_pct_min": 0.004
+    },
+    "11": {
+      "min_history_bars": 120,
+      "breakout_lookback": 12,
+      "exit_lookback": 6,
+      "atr_period": 14,
+      "trend_ema_period": 34,
+      "atr_stop_mult": 2.0
+    },
+    "12": {
+      "min_history_bars": 120,
+      "ema_period": 21,
+      "atr_period": 14,
+      "atr_band_mult": 2.5,
+      "entry_rsi_min": 52,
+      "exit_rsi_min": 45
+    },
+    "13": {
+      "min_history_bars": 160,
+      "bb_period": 20,
+      "bb_std": 2.0,
+      "rsi_period": 14,
+      "oversold_rsi": 30,
+      "mean_revert_rsi": 48,
+      "atr_period": 14,
+      "entry_atr_pct_max": 0.035
+    },
+    "14": {
+      "min_history_bars": 320,
+      "entry_score_threshold": 85,
+      "exit_score_threshold": 35,
+      "entry_rsi_min": 58
+    },
+    "15": {
+      "min_history_bars": 100,
+      "ema9_period": 9,
+      "ema21_period": 21,
+      "rsi_period": 14,
+      "atr_period": 14,
+      "atr_stop_mult": 1.5,
+      "atr_tp_mult": 3.0
+    },
+    "16": {
+      "min_history_bars": 7200,
+      "ema200_period": 200,
+      "ema50_period": 50,
+      "cmf_period": 20,
+      "rsi_period": 14,
+      "atr_period": 14,
+      "whale_cmf_min": 0.05,
+      "entry_rsi_min": 52
     }
   }
 }

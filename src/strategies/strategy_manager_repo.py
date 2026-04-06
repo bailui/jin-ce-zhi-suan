@@ -4,8 +4,8 @@ import os
 import re
 from datetime import datetime
 from src.strategies.implemented_strategies import (
-    Strategy00, Strategy01, Strategy02, Strategy03, Strategy04, Strategy05,
-    Strategy06, Strategy07, Strategy08, Strategy09, BaseImplementedStrategy
+    Strategy00, Strategy10, Strategy11,
+    Strategy12, Strategy13, Strategy14, BaseImplementedStrategy
 )
 from src.utils.indicators import Indicators
 import pandas as pd
@@ -15,15 +15,11 @@ from src.strategy_intent.intent_engine import StrategyIntentEngine
 
 _BUILTIN_STRATEGY_CLASSES = {
     "00": Strategy00,
-    "01": Strategy01,
-    "02": Strategy02,
-    "03": Strategy03,
-    "04": Strategy04,
-    "05": Strategy05,
-    "06": Strategy06,
-    "07": Strategy07,
-    "08": Strategy08,
-    "09": Strategy09,
+    "10": Strategy10,
+    "11": Strategy11,
+    "12": Strategy12,
+    "13": Strategy13,
+    "14": Strategy14,
 }
 _BUILTIN_META_CACHE = None
 
@@ -159,8 +155,7 @@ def list_builtin_strategy_meta():
     if isinstance(_BUILTIN_META_CACHE, list) and _BUILTIN_META_CACHE:
         return [dict(x) for x in _BUILTIN_META_CACHE]
     items = [
-        Strategy00(), Strategy01(), Strategy02(), Strategy03(), Strategy04(),
-        Strategy05(), Strategy06(), Strategy07(), Strategy08(), Strategy09()
+        Strategy00(), Strategy10(), Strategy11(), Strategy12(), Strategy13(), Strategy14()
     ]
     out = []
     for s in items:
